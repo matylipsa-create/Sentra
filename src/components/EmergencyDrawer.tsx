@@ -108,7 +108,7 @@ export default function EmergencyDrawer() {
                 return (
                   <button
                     key={action.id}
-                    onClick=async () => {
+                    onClick={async () => {
   // Disparo táctico inmediato al Webhook de Pipedream
   await notificarNucleoEvolis(action.id, "alto", Emergencia iniciada: ${action.label});
 
