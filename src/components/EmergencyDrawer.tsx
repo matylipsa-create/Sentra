@@ -14,7 +14,7 @@ const EMERGENCY_ACTIONS = [
   {
     id: 'ambulance',
     label: 'Ambulancia',
-    number: '065',
+    number: '107',
     icon: HeartPulse,
     color: '#ef4444',
     description: 'Emergencia médica',
