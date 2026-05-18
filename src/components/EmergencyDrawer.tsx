@@ -107,15 +107,13 @@ export default function EmergencyDrawer() {
                 return (
                   <button
                     key={action.id}
-onClick={async () => {
-          await notificarNucleoEvolis(action.id, "alto", Emergencia iniciada: ${action.label});
-
-          if (action.action === 'protocol') {
-            handleProtocol();
-          } else if (action.number) {
-            handleCall(action.number);
-          }
-        }}
+                    onClick={() => {
+                      if (action.action === 'protocol') {
+                        handleProtocol();
+                      } else if (action.number) {
+                        handleCall(action.number);
+                      }
+                    }}
                     className="flex flex-col items-center p-4 rounded-2xl border transition-all active:scale-95"
                     style={{
                       background: `${action.color}15`,
