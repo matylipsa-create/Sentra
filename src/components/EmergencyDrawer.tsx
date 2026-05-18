@@ -1,4 +1,3 @@
-import { notificarNucleoEvolis } from '../services/pipedream';
 import { X, Phone, Shield, AlertTriangle, Siren, HeartPulse, Radio } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSpeech } from '../hooks/useSpeech';
@@ -15,7 +14,7 @@ const EMERGENCY_ACTIONS = [
   {
     id: 'ambulance',
     label: 'Ambulancia',
-    number: '107',
+    number: '065',
     icon: HeartPulse,
     color: '#ef4444',
     description: 'Emergencia médica',
@@ -108,15 +107,13 @@ export default function EmergencyDrawer() {
                 return (
                   <button
                     key={action.id}
-onClick={async () => {
-  await notificarNucleoEvolis(action.id, "alto", Emergencia iniciada: ${action.label});
-
-  if (action.action === 'protocol') {
-    handleProtocol();
-  } else if (action.number) {
-    handleCall(action.number);
-  }
-}}
+                    onClick={() => {
+                      if (action.action === 'protocol') {
+                        handleProtocol();
+                      } else if (action.number) {
+                        handleCall(action.number);
+                      }
+                    }}
                     className="flex flex-col items-center p-4 rounded-2xl border transition-all active:scale-95"
                     style={{
                       background: `${action.color}15`,

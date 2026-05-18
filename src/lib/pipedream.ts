@@ -130,29 +130,3 @@ Timestamp: ${new Date().toISOString()}`;
 }
 
 export const pipedreamOrchestrator = new PipedreamOrchestrator();
-export const notificarNucleoEvolis = async (tipoEvento: string, nivelRiesgo: string, detalle: string) => {
-  const PIPEDREAM_WEBHOOK_URL = "https://eoch_ypfggP.m.pipedream.net";
-
-  try {
-    const response = await fetch(PIPEDREAM_WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        tipo: tipoEvento,
-        nivel: nivelRiesgo,
-        mensaje: detalle,
-        timestamp: new Date().toISOString()
-      }),
-    });
-
-    if (response.ok) {
-      console.log("📡 Ráfaga enviada con éxito al núcleo EVOLIS.");
-    } else {
-      console.warn(⚠️ Pipedream respondió con estado: ${response.status});
-    }
-  } catch (error) {
-    console.error("❌ Falla crítica de comunicación con el servidor central:", error);
-  }
-};
