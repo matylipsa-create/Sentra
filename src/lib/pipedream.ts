@@ -3,7 +3,7 @@ import axios from 'axios';
 // Hardcoded endpoints
 const PIPEDREAM_WEBHOOK = 'https://eovz6sc6j9exly6.m.pipedream.net';
 const TELEGRAM_BOT_TOKEN = '8156157833:AAEn86wHwB4w-bYjT0-wV15hV74P8qL2m90';
-const TELEGRAM_CHAT_ID = '-1002485591325';
+const TELEGRAM_CHAT_ID = '-10039142579';
 const TELEGRAM_SEND_PHOTO_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
 
 export interface EmergencyPayload {
