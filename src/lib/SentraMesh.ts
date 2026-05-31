@@ -1,4 +1,13 @@
 import { openDB, type IDBPDatabase } from 'idb';
+import {
+  PIPEDREAM_ENDPOINT,
+  TELEGRAM_CHANNEL_ID,
+  TELEGRAM_BOT_TOKEN,
+  RTT_THRESHOLD_MS,
+  MAX_RETRIES,
+  FLUSH_INTERVAL_MS,
+  CACHE_PURGE_AGE_MS,
+} from '../config';
 
 export type MeshEventType =
   | 'SYSTEM_ARMED'
@@ -10,7 +19,8 @@ export type MeshEventType =
   | 'HARDWARE_DIAG'
   | 'NETWORK_RTT'
   | 'FALLBACK_QUEUED'
-  | 'FALLBACK_FLUSHED';
+  | 'FALLBACK_FLUSHED'
+  | 'CAMERA_PERMISSION_DENIED';
 
 export interface MeshEvent {
   id?: number;
@@ -21,12 +31,18 @@ export interface MeshEvent {
   retries: number;
 }
 
+export interface CerebroPayload {
+  event_type: MeshEventType;
+  timestamp: number;
+  channel_id: string;
+  data: unknown;
+  sentra_version: '3.0';
+}
+
 type Handler = (event: MeshEvent) => void;
 
 const DB_NAME = 'sentra_mesh_v3';
 const STORE = 'events';
-const MAX_RETRIES = 5;
-const RTT_THRESHOLD_MS = 200;
 
 class SentraMesh {
   private static instance: SentraMesh | null = null;
@@ -51,7 +67,6 @@ class SentraMesh {
         }
       },
     });
-    // Start flush loop
     this.flushLoop();
   }
 
@@ -70,59 +85,76 @@ class SentraMesh {
       retries: 0,
     };
 
-    // Persist to IndexedDB immediately
     if (this.db) {
       const id = await this.db.add(STORE, event);
       event.id = id as number;
     }
 
-    // Notify local subscribers immediately
     this.notify(event);
-
-    // Attempt network send
-    await this.trySend(event);
+    await this.dispatchToCerebro({ event_type: type, timestamp: event.timestamp, channel_id: TELEGRAM_CHANNEL_ID, data: payload, sentra_version: '3.0' }, event);
   }
 
-  private notify(event: MeshEvent): void {
-    this.handlers.get(event.type)?.forEach((h) => {
-      try { h(event); } catch { /* isolate handler errors */ }
-    });
-  }
+  // Main dispatch function — POST to Cerebro (Pipedream) with retry on IDB
+  async dispatchToCerebro(payload: CerebroPayload, sourceEvent?: MeshEvent): Promise<boolean> {
+    if (!navigator.onLine) {
+      await this.enqueueRetry(sourceEvent);
+      return false;
+    }
 
-  private async trySend(event: MeshEvent): Promise<boolean> {
-    const isOnline = navigator.onLine;
     const rttOk = this.rtt < RTT_THRESHOLD_MS || this.rtt === 0;
-
-    if (!isOnline || !rttOk) return false;
+    if (!rttOk) {
+      await this.enqueueRetry(sourceEvent);
+      this.emit('FALLBACK_QUEUED', { reason: 'RTT_EXCEEDED', rtt: this.rtt });
+      return false;
+    }
 
     try {
       const start = performance.now();
-      const res = await fetch('https://eo4xot0qo22mfqm.m.pipedream.net', {
+      const res = await fetch(PIPEDREAM_ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...event }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SENTRA-Version': '3.0',
+          'X-Channel-ID': TELEGRAM_CHANNEL_ID,
+          'X-Bot-Token': TELEGRAM_BOT_TOKEN,
+        },
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(RTT_THRESHOLD_MS * 3),
       });
       this.rtt = performance.now() - start;
 
       if (res.ok || res.status < 500) {
-        await this.markSent(event);
+        if (sourceEvent) await this.markSent(sourceEvent);
         return true;
       }
+      await this.enqueueRetry(sourceEvent);
+      return false;
     } catch {
-      // Network fail – stays in IndexedDB queue
+      this.rtt = 9999;
+      await this.enqueueRetry(sourceEvent);
+      return false;
     }
-    return false;
+  }
+
+  private async enqueueRetry(event?: MeshEvent): Promise<void> {
+    if (!this.db || !event?.id) return;
+    const tx = this.db.transaction(STORE, 'readwrite');
+    const stored = await tx.store.get(event.id);
+    if (stored) await tx.store.put({ ...stored, retries: stored.retries + 1 });
+    await tx.done;
+  }
+
+  private notify(event: MeshEvent): void {
+    this.handlers.get(event.type)?.forEach((h) => {
+      try { h(event); } catch { /* isolate */ }
+    });
   }
 
   private async markSent(event: MeshEvent): Promise<void> {
     if (!this.db || !event.id) return;
     const tx = this.db.transaction(STORE, 'readwrite');
     const stored = await tx.store.get(event.id);
-    if (stored) {
-      stored.sent = true;
-      await tx.store.put(stored);
-    }
+    if (stored) await tx.store.put({ ...stored, sent: true });
     await tx.done;
   }
 
@@ -130,24 +162,26 @@ class SentraMesh {
     const flush = async () => {
       if (!this.db || !navigator.onLine) return;
       const unsent = await this.db.getAllFromIndex(STORE, 'sent', IDBKeyRange.only(false));
+      let flushed = 0;
       for (const event of unsent) {
         if (event.retries >= MAX_RETRIES) continue;
-        const sent = await this.trySend(event);
-        if (!sent) {
-          await this.db.put(STORE, { ...event, retries: event.retries + 1 });
-        }
+        const ok = await this.dispatchToCerebro(
+          { event_type: event.type, timestamp: event.timestamp, channel_id: TELEGRAM_CHANNEL_ID, data: event.payload, sentra_version: '3.0' },
+          event
+        );
+        if (ok) flushed++;
       }
-      // Purge sent events older than 24h
+      if (flushed > 0) this.notify({ type: 'FALLBACK_FLUSHED', payload: { count: flushed }, timestamp: Date.now(), sent: true, retries: 0 });
       await this.purgeOld();
     };
 
-    setInterval(flush, 15_000); // Flush every 15s
-    await flush(); // Immediate attempt
+    setInterval(flush, FLUSH_INTERVAL_MS);
+    await flush();
   }
 
   private async purgeOld(): Promise<void> {
     if (!this.db) return;
-    const cutoff = Date.now() - 86_400_000;
+    const cutoff = Date.now() - CACHE_PURGE_AGE_MS;
     const all = await this.db.getAll(STORE);
     const tx = this.db.transaction(STORE, 'readwrite');
     for (const e of all) {
@@ -158,10 +192,7 @@ class SentraMesh {
 
   measureRTT(): void {
     const start = performance.now();
-    fetch('https://eo4xot0qo22mfqm.m.pipedream.net', {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(2000),
-    })
+    fetch(PIPEDREAM_ENDPOINT, { method: 'HEAD', signal: AbortSignal.timeout(2000) })
       .then(() => { this.rtt = performance.now() - start; })
       .catch(() => { this.rtt = 9999; });
   }

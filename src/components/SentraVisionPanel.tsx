@@ -9,11 +9,12 @@ interface Detection {
 
 interface Props {
   onThreat: (label: string, confidence: number) => void;
+  onCameraBlocked?: (msg: string) => void;
 }
 
 const THREAT_CLASSES = new Set(['person', 'knife', 'scissors', 'gun']);
 
-export default function SentraVisionPanel({ onThreat }: Props) {
+export default function SentraVisionPanel({ onThreat, onCameraBlocked }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -40,6 +41,8 @@ export default function SentraVisionPanel({ onThreat }: Props) {
         for (const t of e.data.threats) {
           onThreat(t.class, t.score);
         }
+      } else if (type === 'UI_ACTION_REQUEST' && e.data.action === 'SHOW_CAMERA_MODAL') {
+        onCameraBlocked?.(e.data.message);
       }
     };
 
@@ -80,7 +83,14 @@ export default function SentraVisionPanel({ onThreat }: Props) {
         }
         initWorker();
       } catch (e) {
-        setCameraError('Cámara no disponible');
+        const err = e as DOMException;
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          // Forward to worker so it can relay UI_ACTION_REQUEST back
+          workerRef.current?.postMessage({ type: 'CAMERA_DENIED' });
+          onCameraBlocked?.('Permiso de cámara denegado. Habilitalo en ajustes del sitio.');
+        } else {
+          setCameraError('Cámara no disponible');
+        }
       }
     };
 

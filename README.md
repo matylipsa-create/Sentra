@@ -1,59 +1,131 @@
-# SENTRA v2.0 - Adaptive Reactive System 🛡️
-> *PWA de Respuesta de Emergencia de Élite y Pipeline Cognitivo en la Nube*
-> Proyecto postulado para la Competencia de Innovación Santander X (2026).
+# SENTRA v3.0 — Tactic System
 
-SENTRA v2.0 es una aplicación de comando táctico de nivel industrial diseñada para entornos de despacho de emergencias de alta criticidad. Optimizado específicamente para su despliegue móvil en hardware Android/ZTE, el sistema conecta biometría en el borde (edge), flujos de video computacional en tiempo real y filtrado cognitivo de IA en la nube mediante una arquitectura descentralizada de alta disponibilidad.
+Adaptive Reactive Emergency Response PWA. AMOLED dark UI (#000000), offline-first, Web Worker architecture, optimized for mid/high-end Android.
 
----
+## Stack
 
-## ⚡ Pilares Centrales y Ventajas Competitivas
+- React 18 + TypeScript 5 + Vite 5
+- Tailwind CSS (utility-first)
+- TensorFlow.js 4 + COCO-SSD MobileNetV2 (Web Worker, 3 FPS cap, WebGPU preferred)
+- IndexedDB via `idb` — event queue with auto-retry
+- Service Worker: Network-First + 7-day auto-purge
+- Nominatim API — reverse geocoding off main thread
+- Pipedream webhook as primary Cerebro endpoint
 
-* *Telemetría Biométrica en el Borde:* Monitoreo continuo en segundo plano que mapea la frecuencia cardíaca (BPM) en tiempo real y las constantes vitales críticas para el perfilamiento del operador en terreno.
-* *Resiliencia de Doble Canal (Failsafe sin Cuenta):* Enrutamiento multi-nivel integrado. Si la infraestructura principal en la nube sufre saturación o caídas de conexión, el motor de estado del cliente inicia una redirección directa de contingencia hacia la API de Telegram mediante peticiones HTTP POST crudas.
-* *Ventana de Bloqueo Seguro (Safe-Lock contra Pánico):* Un búfer táctico de cuenta regresiva de 3 segundos en los activadores manuales, lo que permite la cancelación inmediata para eliminar falsos positivos en entornos operativos caóticos.
-* *Limitación de Ráfagas Determinista (Throttling):* Ventanas de bloqueo contextual de 10 segundos tanto en el servidor como en el cliente (control_flow) que mitigan ráfagas de datos, duplicaciones o activaciones accidentales repetidas.
-
----
-
-## 🌐 Arquitectura del Sistema y Flujo del Pipeline
-
-El ecosistema de SENTRA desacopla la recolección de datos en campo del enriquecimiento semántico y geográfico profundo:
-
-1. *El Músculo (Aplicación Cliente ZTE):* Captura coordenadas nativas de alta precisión mediante la API de Geolocalización, activa los búferes de la cámara del dispositivo y procesa las variables biométricas en vivo.
-2. *El Enrutador (Núcleo Pipedream):* Gestiona la ingesta asincrónica, ejecuta comprobaciones de límite de ráfagas mediante entornos de ejecución personalizados en Node.js y coordina las rutas de respaldo secundarias.
-3. *El Cerebro (Modelo de Fusión Cognitiva):* Envía la telemetría y las imágenes capturadas a través de un pipeline de IA (Motor Gemini) para obtener evaluaciones situacionales perimetrales instantáneas.
-4. *Resolución Geográfica (OpenStreetMap):* Una codificación geográfica inversa traduce los datos crudos de latitud y longitud en direcciones postales estructuradas y legibles en tiempo real.
-5. *Estandarizador y Persistencia de Datos:* Formatea los payloads volátiles en vectores JSON limpios antes de registrarlos en libros estructurados (registros_sentra) y en el panel operativo de Telegram.
-
----
-
-## 🛠️ Stack Tecnológico y Métricas de Producción
-
-* *Frontend:* Vite, React, Tailwind CSS, Lucide Icons, APIs de Sensores HTML5 (Cámara / Geolocalización).
-* *Backend y Orquestación:* Flujo de trabajo Serverless en Pipedream, Node.js 20.x, Cliente HTTP Axios.
-* *Integración de IA:* Modelo Cognitivo Google Gemini.
-* *Capa de Resiliencia:* Enrutamiento de Telemetría Dual-Channel (Webhook Principal + API de Telegram Directa).
-* *Optimización de Compilación:* Tamaño de distribución ultra ligero (~114.76 KB gzipped) con seguridad estricta en TypeScript y 0 advertencias de ESLint.
-
----
-
-## 📦 Configuración Local y Despliegue
-
-### Compilación del Cliente
-Para instalar y previsualizar la versión optimizada para producción de forma local:
+## Local Development
 
 ```bash
-# Clonar el repositorio
-git clone [https://github.com/](https://github.com/)[tu-usuario]/[tu-repositorio].git
-
-# Navegar al directorio del proyecto
-cd sentra-v2-core
-
-# Instalar dependencias
 npm install
+npm run dev          # http://localhost:5173
+npm run typecheck    # strict TypeScript validation
+npm run build        # production bundle → dist/
+```
 
-# Ejecutar el entorno de desarrollo
-npm run dev
+## Deploy to Vercel
 
-# Compilar la versión de producción lista para APK
-npm run build
+### Option A — Vercel CLI (fastest)
+
+```bash
+npm i -g vercel
+vercel login
+vercel --prod
+```
+
+Vercel auto-detects Vite. No framework config needed. Done.
+
+### Option B — Vercel Dashboard
+
+1. Push repo to GitHub / GitLab.
+2. Go to [vercel.com/new](https://vercel.com/new) → Import project.
+3. Framework preset: **Vite** (auto-detected).
+4. Build command: `npm run build`
+5. Output directory: `dist`
+6. Click **Deploy**.
+
+### Recommended vercel.json (permission headers)
+
+Create `vercel.json` at project root:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Permissions-Policy", "value": "camera=*, microphone=*, geolocation=*" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    }
+  ]
+}
+```
+
+## Environment Variables
+
+None required. All endpoints are hardcoded in `src/config.ts`:
+
+| Key | Value |
+|-----|-------|
+| `PIPEDREAM_ENDPOINT` | `https://eoqv1v7e0297v4p.m.pipedream.net` |
+| `TELEGRAM_CHANNEL_ID` | `-1003914032579` |
+
+## PWA Installation (Android Chrome)
+
+1. Open deployed URL in Chrome for Android.
+2. Tap ⋮ menu → **Add to Home Screen**.
+3. App installs in standalone mode — pure AMOLED black, no browser chrome.
+
+Or use [PWA Builder](https://www.pwabuilder.com/) to generate a signed `.apk` / `.aab` for Play Store.
+
+## Architecture
+
+```
+src/
+├── config.ts                    # Single source of truth for all endpoints
+├── lib/
+│   └── SentraMesh.ts            # Singleton EDA bus + IDB queue + dispatchToCerebro()
+├── workers/
+│   ├── sentraVision.worker.ts   # TF.js COCO-SSD, 3 FPS, WebGPU/WebGL
+│   ├── sentraIA.worker.ts       # NLP coercion filter (es-AR, 30+ keywords)
+│   └── sentraGeo.worker.ts      # Nominatim reverse geocoding + Haversine
+├── hooks/
+│   └── useSentraCore.ts         # ARM/DISARM, geolocation, hardware diagnostics
+└── components/
+    ├── SentraHUD.tsx             # AMOLED HUD — lazy loads Vision + IA on ARM
+    ├── SentraVisionPanel.tsx     # Camera feed + detection overlay
+    └── SentraIAPanel.tsx         # SpeechRecognition bridge (es-AR)
+```
+
+## Key Features
+
+| Feature | Detail |
+|---------|--------|
+| ARM/DISARM | Single RADAR button — only interactive HUD element |
+| Vision | COCO-SSD person/knife/scissors detection at 3 FPS |
+| IA | Continuous `es-AR` speech monitoring, coercion + silent-trigger detection |
+| Code Red | Haptic vibration + silent POST to Pipedream on coercion |
+| One-Shot | RTT check < 200ms before send; queue to IDB if exceeded |
+| Retry | Auto-flush every 15s, max 5 retries per event |
+| Camera blocked | `NotAllowedError` → modal via `UI_ACTION_REQUEST` |
+| Log debounce | 500ms debounce prevents main-thread flooding |
+| Geo | Nominatim `display_name` (street/number) in worker thread |
+
+## Bundle Sizes
+
+| Chunk | Size (gzip) | Loaded |
+|-------|-------------|--------|
+| index.js | ~15 KB | Always |
+| vendor.js | ~83 KB | Always |
+| idb.js | ~1.4 KB | Always |
+| sentraVision.worker.js | ~1.8 MB | On ARM only |
+| SentraVisionPanel.js | ~1.5 KB | On ARM (lazy) |
+| SentraIAPanel.js | ~0.8 KB | On ARM (lazy) |
