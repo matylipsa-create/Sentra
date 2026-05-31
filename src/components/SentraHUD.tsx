@@ -397,6 +397,7 @@ export default function SentraHUD() {
                 <SentraVisionPanel
                   onThreat={(label, confidence) => mesh.emit('VISION_ALERT', { label, confidence })}
                   onCameraBlocked={(msg) => mesh.emit('CAMERA_PERMISSION_DENIED', { message: msg })}
+                  location={geo.latitude !== null ? { latitude: geo.latitude, longitude: geo.longitude! } : null}
                 />
               </Suspense>
             ) : (
