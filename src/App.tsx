@@ -41,18 +41,25 @@ function AppShell() {
     }
   }, []);
 
-  const isFullHeight = state.activeTab === 'regulation' || state.activeTab === 'operations';
+  // Dashboard is SENTRA v3 — full height, no horizontal padding, no overflow
+  const isFullHeight = state.activeTab === 'dashboard' || state.activeTab === 'regulation' || state.activeTab === 'operations';
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#0a0e1a' }}>
       <TopBar />
 
       <main
-        className="flex-1 overflow-y-auto overflow-x-hidden pt-14 pb-20 px-4"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="flex-1 overflow-y-auto overflow-x-hidden pt-14 pb-20"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          // Zero padding for dashboard (AMOLED HUD)
+          paddingLeft: state.activeTab === 'dashboard' ? 0 : '1rem',
+          paddingRight: state.activeTab === 'dashboard' ? 0 : '1rem',
+          background: state.activeTab === 'dashboard' ? '#000000' : '#0a0e1a',
+        }}
       >
         {isFullHeight ? (
-          <div className="flex flex-col" style={{ minHeight: 'calc(100dvh - 136px)' }}>
+          <div className="flex flex-col" style={{ minHeight: 'calc(100dvh - 136px)', background: state.activeTab === 'dashboard' ? '#000000' : undefined }}>
             <PageContent />
           </div>
         ) : (

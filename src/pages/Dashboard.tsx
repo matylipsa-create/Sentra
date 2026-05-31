@@ -1,9 +1,5 @@
-import EmergencyCommandCenter from '../components/EmergencyCommandCenter';
+import SentraHUD from '../components/SentraHUD';
 
 export default function Dashboard() {
-  return (
-    <div className="flex flex-col h-full w-full">
-      <EmergencyCommandCenter />
-    </div>
-  );
+  return <SentraHUD />;
 }
