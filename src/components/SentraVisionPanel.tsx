@@ -24,8 +24,7 @@ type PtzDir = 'up' | 'down' | 'left' | 'right' | 'zoom_in' | 'zoom_out';
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const MODE_KEY       = 'sentra_mode';
-const REMOTE_URL_KEY = 'sentra_remote_url';
-const DEFAULT_REMOTE = 'http://192.168.1.50:8080/video';
+const REMOTE_URL_KEY = 'sentra_camera_url';   // shared with Settings panel
 const RETRY_MS       = 5000;
 
 // ── PTZ hook — completely isolated from the video stream ───────────────────
@@ -244,7 +243,14 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
     stopStream();
     const vid = videoRef.current;
     if (!vid) return;
-    const url = localStorage.getItem(REMOTE_URL_KEY) || DEFAULT_REMOTE;
+    const url = (localStorage.getItem(REMOTE_URL_KEY) || '').trim();
+
+    // No URL configured yet — show placeholder, do not attempt connection
+    if (!url) {
+      setStatus('ERROR');
+      return;
+    }
+
     try { new URL(url); } catch { setStatus('ERROR'); return; }
     setStatus('CONNECTING');
     vid.srcObject    = null;
@@ -291,6 +297,15 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
     if (mode === 'LOCAL') initLocal();
     else                  initRemote();
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── React to URL changes saved from Settings ─────────────────────────────
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === REMOTE_URL_KEY && mode === 'REMOTE') initRemote();
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, [mode, initRemote]);
 
   useEffect(() => {
     if (modelReady) startCapture();
@@ -395,12 +410,23 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
             </div>
           )}
 
-          {/* Stream error overlay */}
+          {/* Stream error / no-config overlay */}
           {status === 'ERROR' && (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}>
-              <p style={{ color: R, fontSize: '10px', fontFamily: 'monospace' }}>
-                [STREAM ERROR — REINTENTANDO EN 5s...]
-              </p>
+              {mode === 'REMOTE' && !(localStorage.getItem(REMOTE_URL_KEY) || '').trim() ? (
+                <div className="flex flex-col items-center gap-1">
+                  <p style={{ color: `${C}80`, fontSize: '10px', fontFamily: 'monospace' }}>
+                    ESPERANDO CONFIGURACIÓN
+                  </p>
+                  <p style={{ color: `${C}40`, fontSize: '8px', fontFamily: 'monospace' }}>
+                    Ingresa la URL en Ajustes → Cámara IP
+                  </p>
+                </div>
+              ) : (
+                <p style={{ color: R, fontSize: '10px', fontFamily: 'monospace' }}>
+                  [STREAM ERROR — REINTENTANDO EN 5s...]
+                </p>
+              )}
             </div>
           )}
 

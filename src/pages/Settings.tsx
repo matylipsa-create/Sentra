@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Activity, Volume2, Cpu, Shield, User, ChevronRight, Info, Sliders } from 'lucide-react';
+import { Activity, Volume2, Cpu, Shield, User, ChevronRight, Info, Sliders, Video, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AgentName } from '../types';
+
+const CAMERA_URL_KEY = 'sentra_camera_url';
 
 function Toggle({
   checked,
@@ -101,6 +103,20 @@ export default function Settings() {
   const { state, updateBiometric, updateAgent } = useApp();
   const { biometricProfile } = state;
   const [activeSection, setActiveSection] = useState<string | null>(null);
+
+  // ── Camera URL state ────────────────────────────────────────────────────
+  const [cameraUrl, setCameraUrl]     = useState(() => localStorage.getItem(CAMERA_URL_KEY) || '');
+  const [savedFlash, setSavedFlash]   = useState(false);
+  const [reloadKey, setReloadKey]     = useState(0); // bumping this forces VisionPanel remount externally via key
+
+  const saveCameraUrl = () => {
+    const trimmed = cameraUrl.trim();
+    localStorage.setItem(CAMERA_URL_KEY, trimmed);
+    // Signal VisionPanel to reload by dispatching a storage event on the same tab
+    window.dispatchEvent(new StorageEvent('storage', { key: CAMERA_URL_KEY, newValue: trimmed }));
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 2000);
+  };
 
   return (
     <div className="flex flex-col gap-5 pb-4">
@@ -259,6 +275,52 @@ export default function Settings() {
             </div>
           );
         })}
+      </Section>
+
+      {/* Camera IP */}
+      <Section title="Cámara IP · Stream" icon={Video}>
+        <div className="py-3 flex flex-col gap-3">
+          <div>
+            <p className="text-sm text-gray-200 font-medium mb-1">URL de Stream de Cámara</p>
+            <p className="text-xs text-gray-500 mb-2">
+              Formato: <span className="font-mono text-gray-400">http://192.168.x.x:8080/video</span>
+            </p>
+            <input
+              type="url"
+              value={cameraUrl}
+              onChange={(e) => setCameraUrl(e.target.value)}
+              placeholder="http://192.168.1.50:8080/video"
+              className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none transition-all"
+              style={{
+                background:   'rgba(0,255,0,0.04)',
+                border:       `1px solid ${cameraUrl ? 'rgba(0,255,0,0.25)' : 'rgba(255,255,255,0.1)'}`,
+                color:        '#e5e7eb',
+                caretColor:   '#00FF00',
+              }}
+              onFocus={(e) => (e.target.style.borderColor = 'rgba(0,255,0,0.5)')}
+              onBlur={(e)  => (e.target.style.borderColor = cameraUrl ? 'rgba(0,255,0,0.25)' : 'rgba(255,255,255,0.1)')}
+            />
+          </div>
+          <button
+            onClick={saveCameraUrl}
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-200"
+            style={{
+              background:   savedFlash ? 'rgba(0,255,0,0.15)' : 'rgba(0,255,0,0.08)',
+              border:       `1px solid ${savedFlash ? 'rgba(0,255,0,0.6)' : 'rgba(0,255,0,0.25)'}`,
+              color:        savedFlash ? '#00FF00' : '#6ee7b7',
+            }}
+          >
+            {savedFlash
+              ? <><CheckCircle size={14} /> Guardado · Stream recargando...</>
+              : 'Guardar y Recargar Stream'
+            }
+          </button>
+          {!cameraUrl && (
+            <p className="text-xs text-center" style={{ color: 'rgba(0,191,255,0.4)', fontFamily: 'monospace' }}>
+              Sin URL configurada — VisionPanel en espera
+            </p>
+          )}
+        </div>
       </Section>
 
       {/* Security */}
