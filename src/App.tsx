@@ -1,5 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import SentraAuth from './components/SentraAuth';
+import type { SentraUser } from './components/SentraAuth';
 import TopBar from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import EmergencyDrawer from './components/EmergencyDrawer';
@@ -75,7 +77,24 @@ function AppShell() {
   );
 }
 
+const WHITELIST = ['matylipsa@gmail.com'];
+
 export default function App() {
+  const [user, setUser] = useState<SentraUser | null>(null);
+
+  const handleAuth = (authenticatedUser: SentraUser) => {
+    if (authenticatedUser.method === 'BIOMETRIC' || WHITELIST.includes(authenticatedUser.email ?? '')) {
+      setUser(authenticatedUser);
+    } else {
+      console.error('Acceso Denegado: Usuario no autorizado —', authenticatedUser.email);
+      alert('Acceso Denegado');
+    }
+  };
+
+  if (!user) {
+    return <SentraAuth onAuthenticated={handleAuth} />;
+  }
+
   return (
     <AppProvider>
       <AppShell />
