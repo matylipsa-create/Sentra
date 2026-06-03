@@ -20,7 +20,8 @@ export type MeshEventType =
   | 'NETWORK_RTT'
   | 'FALLBACK_QUEUED'
   | 'FALLBACK_FLUSHED'
-  | 'CAMERA_PERMISSION_DENIED';
+  | 'CAMERA_PERMISSION_DENIED'
+  | 'AUDIO_ALERT';
 
 export interface MeshEvent {
   id?: number;

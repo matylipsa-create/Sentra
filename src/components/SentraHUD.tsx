@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { useSentraCore } from '../hooks/useSentraCore';
 import { mesh } from '../lib/SentraMesh';
+import AudioEngine from './AudioEngine';
+import type { AudioAlertLog } from './AudioEngine';
 
 const SentraVisionPanel = lazy(() => import('./SentraVisionPanel'));
 const SentraIAPanel     = lazy(() => import('./SentraIAPanel'));
@@ -244,7 +246,7 @@ export default function SentraHUD() {
       setPhase('ARMED');
       setShowVision(true);
       setShowIA(true);
-      addLog('SentraVision + SentraIA cargados', 'ok');
+      addLog('SentraVision + SentraIA + AudioEngine cargados', 'ok');
       triggerHaptic([100, 50, 100]);
     } else {
       addLog('Desarmando...', 'warn');
@@ -260,12 +262,19 @@ export default function SentraHUD() {
 
   const color = PHASE_COLOR[phase];
 
+  // Handler for AudioEngine alerts → inject into tactical log
+  const handleAudioAlert = useCallback((log: AudioAlertLog) => {
+    addLog(`AUDIO: ${log.alerta}`, 'crit');
+    triggerHaptic([150, 80, 150]);
+    setPhase('ALERT');
+  }, [addLog, triggerHaptic]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden font-mono select-none"
       style={{ background: '#000000', color: '#00FF00' }}>
 
-      {/* Status bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b text-xs"
+      {/* ── Compact status bar ───────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-1 border-b text-xs flex-shrink-0"
         style={{ borderColor: `${color}25`, background: `${color}06` }}>
         <div className="flex items-center gap-2">
           <span className="font-bold tracking-[0.2em]" style={{ color }}>SENTRA</span>
@@ -293,29 +302,24 @@ export default function SentraHUD() {
         </div>
       </div>
 
-      {/* Main grid */}
-      <div className="flex-1 grid grid-cols-2 gap-0 overflow-hidden min-h-0">
+      {/* ── Top section: Radar + Info (shrinks to give Video room) ─────── */}
+      <div className="grid grid-cols-2 gap-0 overflow-hidden min-h-0" style={{ flex: '0 0 auto', maxHeight: 'calc(50dvh - 80px)' }}>
 
         {/* Left: Radar + ARM */}
-        <div className="flex flex-col items-center justify-between py-4 px-2 border-r"
+        <div className="flex flex-col items-center justify-between py-3 px-2 border-r overflow-hidden"
           style={{ borderColor: `${color}18` }}>
 
-          {/* Radar with ARM button as the single interactive element */}
-          <div className="relative w-full aspect-square max-w-[210px]">
+          <div className="relative w-full aspect-square max-w-[180px]">
             <RadarRings armed={armed} phase={phase} />
-            {/* ACTION / ARM button — only interactive element on HUD */}
             <button
               onClick={handleArmToggle}
               disabled={arming || phase === 'LOCKDOWN'}
               aria-label={armed ? 'Desarmar SENTRA' : 'Armar SENTRA'}
               className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-full transition-all active:scale-95 focus:outline-none"
-              style={{
-                background: 'transparent',
-                cursor: arming || phase === 'LOCKDOWN' ? 'not-allowed' : 'pointer',
-              }}
+              style={{ background: 'transparent', cursor: arming || phase === 'LOCKDOWN' ? 'not-allowed' : 'pointer' }}
             >
               <Radio
-                size={30}
+                size={26}
                 style={{ color, filter: `drop-shadow(0 0 8px ${color})` }}
                 className={armed ? 'animate-pulse' : ''}
               />
@@ -325,17 +329,15 @@ export default function SentraHUD() {
             </button>
           </div>
 
-          {/* Arm/Disarm explicit button */}
           <button
             onClick={handleArmToggle}
             disabled={arming || phase === 'LOCKDOWN'}
-            className="w-full py-2 rounded border font-bold text-xs tracking-widest transition-all active:scale-95 mt-1"
+            className="w-full py-1.5 rounded border font-bold text-xs tracking-widest transition-all active:scale-95"
             style={{
-              borderColor: color,
-              color,
-              background: armed ? `${color}18` : 'transparent',
-              boxShadow: armed ? `0 0 10px ${color}35` : 'none',
-              opacity: phase === 'LOCKDOWN' ? 0.4 : 1,
+              borderColor: color, color,
+              background:  armed ? `${color}18` : 'transparent',
+              boxShadow:   armed ? `0 0 10px ${color}35` : 'none',
+              opacity:     phase === 'LOCKDOWN' ? 0.4 : 1,
             }}
           >
             {armed
@@ -343,72 +345,45 @@ export default function SentraHUD() {
               : <><Unlock size={11} className="inline mr-1" />ARMAR</>}
           </button>
 
-          {/* Hardware diag */}
-          <div className="w-full mt-3 px-1">
-            <p className="text-xs mb-1 tracking-widest" style={{ color: `${color}40` }}>HARDWARE</p>
+          <div className="w-full px-1">
+            <p className="text-xs mb-0.5 tracking-widest" style={{ color: `${color}40` }}>HW</p>
             <DiagRow label="CAM"  ok={diag.camera} />
             <DiagRow label="MIC"  ok={diag.microphone} />
             <DiagRow label="GEO"  ok={diag.geolocation} />
             <DiagRow label="IDB"  ok={diag.indexeddb} />
-            <DiagRow label="SW"   ok={diag.serviceWorker} />
-            <DiagRow label="WRK"  ok={diag.webWorker} />
           </div>
         </div>
 
-        {/* Right: Geo + Vision + IA */}
+        {/* Right: Geo + Operator + IA */}
         <div className="flex flex-col overflow-hidden min-h-0">
 
-          {/* Geo */}
-          <div className="p-3 border-b" style={{ borderColor: `${color}18` }}>
-            <div className="flex items-center gap-1 mb-1">
-              <MapPin size={10} style={{ color }} />
-              <span className="text-xs tracking-widest" style={{ color: `${color}55` }}>POSICIÓN</span>
+          <div className="p-2 border-b" style={{ borderColor: `${color}18` }}>
+            <div className="flex items-center gap-1 mb-0.5">
+              <MapPin size={9} style={{ color }} />
+              <span className="text-xs tracking-widest" style={{ color: `${color}55`, fontSize: 8 }}>POSICIÓN</span>
             </div>
             <p className="font-mono leading-tight" style={{ color, fontSize: '9px' }}>
               {geo.latitude !== null
                 ? `${geo.latitude.toFixed(5)}, ${geo.longitude?.toFixed(5)}`
                 : armed ? 'Adquiriendo...' : '— no armado —'}
             </p>
-            <p className="leading-tight mt-0.5 truncate" style={{ color: `${color}60`, fontSize: '9px' }}>
+            <p className="leading-tight mt-0.5 truncate" style={{ color: `${color}60`, fontSize: '8px' }}>
               {geo.address}
             </p>
           </div>
 
-          {/* Operator */}
-          <div className="p-3 border-b" style={{ borderColor: `${color}18` }}>
+          <div className="p-2 border-b" style={{ borderColor: `${color}18` }}>
             <div className="flex items-center gap-1 mb-0.5">
-              <Activity size={10} style={{ color }} />
-              <span className="text-xs tracking-widest" style={{ color: `${color}55` }}>OPERADOR</span>
+              <Activity size={9} style={{ color }} />
+              <span className="tracking-widest" style={{ color: `${color}55`, fontSize: 8 }}>OPERADOR</span>
             </div>
             <p className="text-xs font-bold" style={{ color }}>Matías</p>
-            <p style={{ color: `${color}50`, fontSize: '9px' }}>
+            <p style={{ color: `${color}50`, fontSize: '8px' }}>
               {armed ? 'Sensores activos' : 'En espera'}
             </p>
           </div>
 
-          {/* Vision panel (lazy) */}
-          <div className="flex-1 overflow-hidden min-h-0 border-b" style={{ borderColor: `${color}18` }}>
-            {showVision ? (
-              <Suspense fallback={
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-xs animate-pulse" style={{ color: `${color}70` }}>Cargando SentraVision...</p>
-                </div>
-              }>
-                <SentraVisionPanel
-                  onThreat={(label, confidence) => mesh.emit('VISION_ALERT', { label, confidence })}
-                  onCameraBlocked={(msg) => mesh.emit('CAMERA_PERMISSION_DENIED', { message: msg })}
-                  location={geo.latitude !== null ? { latitude: geo.latitude, longitude: geo.longitude! } : null}
-                />
-              </Suspense>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center gap-1">
-                <p className="text-xs tracking-widest" style={{ color: `${color}25` }}>VISIÓN</p>
-                <p style={{ color: `${color}20`, fontSize: '9px' }}>inactiva</p>
-              </div>
-            )}
-          </div>
-
-          {/* IA panel (lazy) */}
+          {/* IA strip */}
           {showIA && (
             <Suspense fallback={null}>
               <SentraIAPanel
@@ -417,17 +392,43 @@ export default function SentraHUD() {
               />
             </Suspense>
           )}
+
+          {/* AudioEngine — silent side-effect component */}
+          {armed && <AudioEngine geo={geo} onAlert={handleAudioAlert} />}
         </div>
       </div>
 
-      {/* Tactical console — debounced at 500ms */}
-      <div className="border-t" style={{ borderColor: `${color}18` }}>
-        <div className="flex items-center gap-2 px-3 py-1 border-b" style={{ borderColor: `${color}12` }}>
+      {/* ── Vision panel — 50dvh full-width ─────────────────────────────── */}
+      <div className="w-full overflow-hidden border-t flex-shrink-0"
+        style={{ height: '50dvh', borderColor: `${color}20` }}>
+        {showVision ? (
+          <Suspense fallback={
+            <div className="h-full flex items-center justify-center" style={{ background: '#000' }}>
+              <p className="text-xs animate-pulse" style={{ color: `${color}70` }}>Cargando SentraVision...</p>
+            </div>
+          }>
+            <SentraVisionPanel
+              onThreat={(label, confidence) => mesh.emit('VISION_ALERT', { label, confidence })}
+              onCameraBlocked={(msg) => mesh.emit('CAMERA_PERMISSION_DENIED', { message: msg })}
+              location={geo.latitude !== null ? { latitude: geo.latitude, longitude: geo.longitude! } : null}
+            />
+          </Suspense>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center gap-1" style={{ background: '#000' }}>
+            <p className="text-xs tracking-widest" style={{ color: `${color}25` }}>VISIÓN</p>
+            <p style={{ color: `${color}20`, fontSize: '9px' }}>inactiva</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Tactical console ─────────────────────────────────────────────── */}
+      <div className="border-t flex-shrink-0" style={{ borderColor: `${color}18` }}>
+        <div className="flex items-center gap-2 px-3 py-0.5 border-b" style={{ borderColor: `${color}12` }}>
           <Terminal size={9} style={{ color: `${color}60` }} />
-          <span className="text-xs tracking-widest" style={{ color: `${color}40` }}>TACTICAL LOG</span>
+          <span className="text-xs tracking-widest" style={{ color: `${color}40` }}>LOG</span>
           <span className="ml-auto" style={{ color: `${color}30`, fontSize: '9px' }}>{logs.length}</span>
         </div>
-        <div ref={consoleRef} className="overflow-y-auto px-3 py-1 space-y-0.5" style={{ height: '88px' }}>
+        <div ref={consoleRef} className="overflow-y-auto px-3 py-1 space-y-0.5" style={{ height: '60px' }}>
           {logs.map((log) => (
             <div key={log.id} className="flex items-start gap-2 leading-tight">
               <span className="flex-shrink-0" style={{ color: '#00FF0035', fontSize: '9px' }}>
@@ -452,7 +453,6 @@ export default function SentraHUD() {
         </div>
       )}
 
-      {/* Camera blocked modal */}
       {cameraModal && <CameraModal msg={cameraModal} onDismiss={() => setCameraModal(null)} />}
     </div>
   );
