@@ -10,25 +10,27 @@ import Regulation from './pages/Regulation';
 import Operations from './pages/Operations';
 import Settings from './pages/Settings';
 
-// ── Active page — each tab gets a key so React fully unmounts on switch ──────
-function PageContent({ tab }: { tab: string }) {
-  switch (tab) {
-    case 'dashboard':  return <Dashboard />;
-    case 'regulation': return <Regulation />;
-    case 'operations': return <Operations />;
-    case 'settings':   return <Settings />;
-    default:           return <Dashboard />;
-  }
+function PageContent() {
+  const { state } = useApp();
+
+  const pages = {
+    dashboard: <Dashboard />,
+    regulation: <Regulation />,
+    operations: <Operations />,
+    settings: <Settings />,
+  };
+
+  return pages[state.activeTab];
 }
 
 function AppShell() {
   const { state } = useApp();
-  const isDashboard = state.activeTab === 'dashboard';
-  const isFullBleed = isDashboard || state.activeTab === 'regulation' || state.activeTab === 'operations';
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker
+        .register('/sw.js')
+        .catch(() => {/* non-fatal */});
     }
   }, []);
 
@@ -41,51 +43,34 @@ function AppShell() {
     }
   }, []);
 
+  // Dashboard is SENTRA v3 — full height, no horizontal padding, no overflow
+  const isFullHeight = state.activeTab === 'dashboard' || state.activeTab === 'regulation' || state.activeTab === 'operations';
+
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ background: isDashboard ? '#000000' : '#0a0e1a' }}
-    >
-      {/* TopBar is always z-30 root — never overlapped */}
+    <div className="min-h-screen flex flex-col" style={{ background: '#0a0e1a' }}>
       <TopBar />
 
       <main
-        className="flex-1 pt-14 pb-20"
+        className="flex-1 overflow-y-auto overflow-x-hidden pt-14 pb-20"
         style={{
-          // Dashboard: zero overflow, AMOLED black, HUD fills exactly
-          overflow:   isDashboard ? 'hidden' : 'auto',
-          background: isDashboard ? '#000000' : '#0a0e1a',
           WebkitOverflowScrolling: 'touch',
+          // Zero padding for dashboard (AMOLED HUD)
+          paddingLeft: state.activeTab === 'dashboard' ? 0 : '1rem',
+          paddingRight: state.activeTab === 'dashboard' ? 0 : '1rem',
+          background: state.activeTab === 'dashboard' ? '#000000' : '#0a0e1a',
         }}
       >
-        {isFullBleed ? (
-          // Full-height container — HUD/pages fill exact viewport height
-          <div
-            // key forces full unmount+remount when tab changes → no state bleed
-            key={state.activeTab}
-            className="flex flex-col"
-            style={{
-              height:     isDashboard ? 'calc(100dvh - 136px)' : undefined,
-              minHeight:  isDashboard ? undefined : 'calc(100dvh - 136px)',
-              overflow:   isDashboard ? 'hidden' : undefined,
-              paddingLeft:  '0',
-              paddingRight: '0',
-            }}
-          >
-            <PageContent tab={state.activeTab} />
+        {isFullHeight ? (
+          <div className="flex flex-col" style={{ minHeight: 'calc(100dvh - 136px)', background: state.activeTab === 'dashboard' ? '#000000' : undefined }}>
+            <PageContent />
           </div>
         ) : (
-          // Settings — scrollable, centered, padded
-          <div
-            key={state.activeTab}
-            className="max-w-lg mx-auto py-4 px-4"
-          >
-            <PageContent tab={state.activeTab} />
+          <div className="max-w-lg mx-auto py-4">
+            <PageContent />
           </div>
         )}
       </main>
 
-      {/* BottomNav and EmergencyDrawer are always above content, never inside scroll */}
       <BottomNav />
       <EmergencyDrawer />
     </div>
@@ -98,12 +83,10 @@ export default function App() {
   const [user, setUser] = useState<SentraUser | null>(null);
 
   const handleAuth = (authenticatedUser: SentraUser) => {
-    if (
-      authenticatedUser.method === 'BIOMETRIC' ||
-      WHITELIST.includes(authenticatedUser.email ?? '')
-    ) {
+    if (authenticatedUser.method === 'BIOMETRIC' || WHITELIST.includes(authenticatedUser.email ?? '')) {
       setUser(authenticatedUser);
     } else {
+      console.error('Acceso Denegado: Usuario no autorizado —', authenticatedUser.email);
       alert('Acceso Denegado');
     }
   };

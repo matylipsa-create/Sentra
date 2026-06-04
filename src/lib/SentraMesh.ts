@@ -21,8 +21,7 @@ export type MeshEventType =
   | 'FALLBACK_QUEUED'
   | 'FALLBACK_FLUSHED'
   | 'CAMERA_PERMISSION_DENIED'
-  | 'AUDIO_ALERT'
-  | 'IA_STATUS';
+  | 'AUDIO_ALERT';
 
 export interface MeshEvent {
   id?: number;
