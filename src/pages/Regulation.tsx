@@ -1,70 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Volume2, VolumeX, Mic, MicOff, Cpu, Anchor, Eye, Loader } from 'lucide-react';
+import { Send, Volume2, VolumeX, Mic, MicOff, Cpu, Anchor, Eye, Loader, WifiOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSpeech } from '../hooks/useSpeech';
-import { supabase } from '../lib/supabase';
+import { PIPEDREAM_ENDPOINT } from '../config';
 import type { ChatMessage, AgentName } from '../types';
-
-const RESONANCE_RESPONSES: Record<string, { agent: AgentName; text: string }[]> = {
-  default: [
-    {
-      agent: 'Daemon',
-      text: 'Te escucho. Estoy aquí contigo en este momento. ¿Puedes describir lo que estás sintiendo con más detalle?',
-    },
-    {
-      agent: 'Anchor',
-      text: 'Nota cómo tu respiración sostiene este momento. Estás presente. Estás a salvo. ¿Qué necesitas ahora?',
-    },
-    {
-      agent: 'Observer',
-      text: 'Desde mi posición de observación, percibo que estás procesando algo importante. Tómate el tiempo que necesites.',
-    },
-  ],
-  stress: [
-    {
-      agent: 'Daemon',
-      text: 'Detecto señales de tensión elevada. Iniciando protocolo de estabilización. Respira conmigo: inhala por 4, sostén por 4, exhala por 6.',
-    },
-    {
-      agent: 'Anchor',
-      text: 'El estrés es información, no una amenaza. Conecta con tu cuerpo. ¿Dónde sientes la tensión físicamente?',
-    },
-  ],
-  calm: [
-    {
-      agent: 'Daemon',
-      text: 'Excelente estado de regulación. Tu sistema nervioso muestra coherencia. Mantén esta frecuencia.',
-    },
-    {
-      agent: 'Observer',
-      text: 'Observo equilibrio en tus patrones. Este es tu estado base óptimo. Recuérdalo.',
-    },
-  ],
-  help: [
-    {
-      agent: 'Anchor',
-      text: 'Estoy aquí. Siempre. Para anclar, para sostener, para acompañarte en cualquier momento que lo necesites.',
-    },
-  ],
-};
-
-function detectIntent(text: string): keyof typeof RESONANCE_RESPONSES {
-  const lower = text.toLowerCase();
-  if (lower.includes('estres') || lower.includes('ansied') || lower.includes('mal') || lower.includes('asustado') || lower.includes('miedo')) return 'stress';
-  if (lower.includes('bien') || lower.includes('tranquil') || lower.includes('calm') || lower.includes('feliz')) return 'calm';
-  if (lower.includes('ayuda') || lower.includes('necesito') || lower.includes('help')) return 'help';
-  return 'default';
-}
-
-function getResponse(intent: keyof typeof RESONANCE_RESPONSES): { agent: AgentName; text: string } {
-  const pool = RESONANCE_RESPONSES[intent];
-  return pool[Math.floor(Math.random() * pool.length)];
-}
 
 const AGENT_COLORS: Record<AgentName, string> = {
   Anchor: '#10b981',
   Daemon: '#1a73e8',
-  Observer: '#8b5cf6',
+  Observer: '#6366f1',
 };
 
 const AGENT_ICONS: Record<AgentName, React.ElementType> = {
@@ -72,6 +16,54 @@ const AGENT_ICONS: Record<AgentName, React.ElementType> = {
   Daemon: Cpu,
   Observer: Eye,
 };
+
+// Local fallback pool — used only when Pipedream is unreachable
+const FALLBACK_POOL: { agent: AgentName; text: string }[] = [
+  { agent: 'Daemon', text: 'Te escucho. Estoy aquí contigo en este momento. ¿Puedes describir lo que sientes con más detalle?' },
+  { agent: 'Anchor', text: 'Nota cómo tu respiración sostiene este momento. Estás presente. Estás a salvo. ¿Qué necesitas ahora?' },
+  { agent: 'Observer', text: 'Desde mi posición de observación, percibo que estás procesando algo importante. Tómate el tiempo que necesites.' },
+  { agent: 'Daemon', text: 'Detecto señales de tensión. Iniciando protocolo de estabilización: inhala 4s — sostén 4s — exhala 6s.' },
+];
+
+async function queryPipedream(
+  userMessage: string,
+  sessionId: string,
+  mode: string
+): Promise<{ agent: AgentName; text: string } | null> {
+  try {
+    const res = await fetch(PIPEDREAM_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SENTRA-Version': '3.0',
+        'X-Flow': 'regulation',
+      },
+      body: JSON.stringify({
+        event_type: 'REGULATION_QUERY',
+        session_id: sessionId,
+        mode,
+        message: userMessage,
+        timestamp: Date.now(),
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) {
+      console.error('[SENTRA] Pipedream regulation endpoint responded with', res.status);
+      return null;
+    }
+
+    const json = await res.json();
+    // Accept either { agent, text } or { response } or { message }
+    const text: string = json?.text ?? json?.response ?? json?.message ?? '';
+    const agent: AgentName = (json?.agent as AgentName) ?? 'Daemon';
+    if (text) return { agent, text };
+    return null;
+  } catch (err) {
+    console.error('[SENTRA] Pipedream regulation unreachable:', err);
+    return null;
+  }
+}
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user';
@@ -102,7 +94,14 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         <Icon size={14} style={{ color }} />
       </div>
       <div className="flex-1">
-        <p className="text-xs font-semibold mb-1" style={{ color }}>{agentName}</p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-xs font-semibold" style={{ color }}>{agentName}</p>
+          {msg.fallback && (
+            <span className="flex items-center gap-1 text-xs text-gray-600">
+              <WifiOff size={9} /> local
+            </span>
+          )}
+        </div>
         <div
           className="px-4 py-3 rounded-2xl rounded-tl-sm"
           style={{ background: `${color}10`, border: `1px solid ${color}20` }}
@@ -129,7 +128,10 @@ function TypingIndicator({ agent }: { agent: AgentName }) {
       >
         <Icon size={14} style={{ color }} />
       </div>
-      <div className="flex gap-1 px-4 py-3 rounded-2xl rounded-tl-sm" style={{ background: `${color}10`, border: `1px solid ${color}20` }}>
+      <div
+        className="flex gap-1 px-4 py-3 rounded-2xl rounded-tl-sm"
+        style={{ background: `${color}10`, border: `1px solid ${color}20` }}
+      >
         {[0, 1, 2].map((i) => (
           <span
             key={i}
@@ -149,7 +151,7 @@ export default function Regulation() {
     {
       id: '0',
       role: 'assistant',
-      content: 'Sistema EVOLIS Core activo. Protocolo de Resonancia Humana iniciado. ¿Cómo estás en este momento?',
+      content: 'Sistema SENTRA activo. Protocolo de Regulación Cognitiva iniciado. ¿Cómo estás en este momento?',
       agent: 'Daemon',
       createdAt: new Date(),
       voiceSpoken: false,
@@ -160,6 +162,7 @@ export default function Regulation() {
   const [typingAgent, setTypingAgent] = useState<AgentName>('Daemon');
   const [voiceActive, setVoiceActive] = useState(state.biometricProfile.voiceEnabled);
   const [listening, setListening] = useState(false);
+  const [pipedreamStatus, setPipedreamStatus] = useState<'ok' | 'fallback' | 'unknown'>('unknown');
   const [sessionId] = useState(() => crypto.randomUUID());
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -170,7 +173,7 @@ export default function Regulation() {
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim()) return;
+      if (!text.trim() || isTyping) return;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -181,68 +184,56 @@ export default function Regulation() {
 
       setMessages((prev) => [...prev, userMsg]);
       setInput('');
-
-      const intent = detectIntent(text);
-      const response = getResponse(intent);
-      setTypingAgent(response.agent);
+      setTypingAgent('Daemon');
       setIsTyping(true);
 
-      // Persist to Supabase
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('chat_messages').insert({
-            session_id: sessionId,
-            role: 'user',
-            content: text.trim(),
-          });
-        }
-      } catch {
-        /* offline or not authed — continue locally */
+      // Small delay so typing indicator renders before the async call
+      await new Promise((r) => setTimeout(r, 400));
+
+      const pipedreamResponse = await queryPipedream(text.trim(), sessionId, state.daemonMode);
+
+      let response: { agent: AgentName; text: string };
+      let isFallback = false;
+
+      if (pipedreamResponse) {
+        response = pipedreamResponse;
+        setPipedreamStatus('ok');
+      } else {
+        // Graceful degradation to local pool
+        const pick = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
+        response = pick;
+        isFallback = true;
+        setPipedreamStatus('fallback');
       }
 
-      // Simulate thinking delay
-      const delay = 800 + Math.random() * 1200;
-      setTimeout(async () => {
-        setIsTyping(false);
+      setTypingAgent(response.agent);
 
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: response.text,
-          agent: response.agent,
-          createdAt: new Date(),
-          voiceSpoken: voiceActive,
-        };
+      // Brief pause after setting the right agent on the indicator
+      await new Promise((r) => setTimeout(r, 300));
+      setIsTyping(false);
 
-        setMessages((prev) => [...prev, assistantMsg]);
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response.text,
+        agent: response.agent,
+        createdAt: new Date(),
+        voiceSpoken: voiceActive,
+        fallback: isFallback,
+      };
 
-        if (voiceActive) {
-          speak(response.text, {
-            rate: state.biometricProfile.voiceRate,
-            pitch: state.biometricProfile.voicePitch,
-            volume: state.biometricProfile.voiceVolume,
-            lang: state.biometricProfile.preferredVoice,
-          });
-        }
+      setMessages((prev) => [...prev, assistantMsg]);
 
-        // Persist assistant response
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase.from('chat_messages').insert({
-              session_id: sessionId,
-              role: 'assistant',
-              content: response.text,
-              agent: response.agent,
-            });
-          }
-        } catch {
-          /* offline */
-        }
-      }, delay);
+      if (voiceActive) {
+        speak(response.text, {
+          rate: state.biometricProfile.voiceRate,
+          pitch: state.biometricProfile.voicePitch,
+          volume: state.biometricProfile.voiceVolume,
+          lang: state.biometricProfile.preferredVoice,
+        });
+      }
     },
-    [voiceActive, sessionId, speak, state.biometricProfile]
+    [voiceActive, sessionId, speak, state.biometricProfile, state.daemonMode, isTyping]
   );
 
   const toggleListening = useCallback(() => {
@@ -283,7 +274,7 @@ export default function Regulation() {
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-white/10">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-widest">EVOLIS Core</p>
+          <p className="text-xs text-gray-500 uppercase tracking-widest">SENTRA</p>
           <h2 className="text-lg font-bold text-white">Regulación Cognitiva</h2>
         </div>
         <div className="flex items-center gap-2">
@@ -297,9 +288,15 @@ export default function Regulation() {
           >
             {voiceActive ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-emerald-400 font-medium">Activo</span>
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all ${
+            pipedreamStatus === 'fallback'
+              ? 'bg-orange-500/10 border-orange-500/30'
+              : 'bg-emerald-500/10 border-emerald-500/30'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${pipedreamStatus === 'fallback' ? 'bg-orange-400' : 'bg-emerald-400'}`} />
+            <span className={`text-xs font-medium ${pipedreamStatus === 'fallback' ? 'text-orange-400' : 'text-emerald-400'}`}>
+              {pipedreamStatus === 'fallback' ? 'Local' : 'IA Activa'}
+            </span>
           </div>
         </div>
       </div>
@@ -308,7 +305,7 @@ export default function Regulation() {
       <div className="py-3 flex justify-center">
         <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5">
           <Cpu size={12} className="text-blue-400" />
-          <span className="text-xs text-gray-400">Protocolo Resonancia Humana — {state.daemonMode}</span>
+          <span className="text-xs text-gray-400">Workflow IA · Pipedream — {state.daemonMode}</span>
         </div>
       </div>
 

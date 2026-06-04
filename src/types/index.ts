@@ -19,6 +19,7 @@ export interface ChatMessage {
   agent?: AgentName;
   createdAt: Date;
   voiceSpoken?: boolean;
+  fallback?: boolean;
 }
 
 export interface SecurityLog {
