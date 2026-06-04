@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Cpu } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { mesh } from '../lib/SentraMesh';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface HudStatus {
-  sensor: boolean;
-  camera: boolean;
+  sensor:  boolean;
+  camera:  boolean;
   network: boolean;
-  armed: boolean;
-  geo: string;
+  armed:   boolean;
+  ia:      boolean;
+  geo:     string;
 }
 
 // ── ECG trace — pure SVG + CSS, zero JS animation cost ────────────────────
@@ -92,11 +93,12 @@ export default function TopBar() {
   const accentColor = MODE_COLORS[state.daemonMode];
 
   const [hud, setHud] = useState<HudStatus>({
-    sensor: false,
-    camera: false,
+    sensor:  false,
+    camera:  false,
     network: navigator.onLine,
-    armed:  false,
-    geo:    '—',
+    armed:   false,
+    ia:      false,
+    geo:     '—',
   });
 
   // Subscribe to mesh events — no render loops, just state patches
@@ -117,8 +119,12 @@ export default function TopBar() {
           geo: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
         }));
       }),
-      mesh.on('SYSTEM_ARMED',   () => setHud((h) => ({ ...h, armed: true  }))),
-      mesh.on('SYSTEM_DISARMED',() => setHud((h) => ({ ...h, armed: false }))),
+      mesh.on('SYSTEM_ARMED',    () => setHud((h) => ({ ...h, armed: true  }))),
+      mesh.on('SYSTEM_DISARMED', () => setHud((h) => ({ ...h, armed: false, ia: false }))),
+      mesh.on('IA_STATUS', (e) => {
+        const { active } = e.payload as { active: boolean };
+        setHud((h) => ({ ...h, ia: active }));
+      }),
     ];
 
     // Network status
@@ -214,6 +220,25 @@ export default function TopBar() {
           <StatusIcon label="SENSOR" ok={hud.sensor}  />
           <StatusIcon label="CAM"    ok={hud.camera}   />
           <StatusIcon label="NET"    ok={hud.network}  />
+
+          {/* IA indicator — Cpu icon glows green when connected */}
+          <div className="flex items-center gap-0.5">
+            <Cpu
+              size={9}
+              style={{
+                color:  hud.ia ? '#00FF00' : 'rgba(255,255,255,0.15)',
+                filter: hud.ia ? 'drop-shadow(0 0 3px #00FF00)' : 'none',
+                transition: 'color 0.4s, filter 0.4s',
+              }}
+              className={hud.ia ? 'animate-pulse' : ''}
+            />
+            <span
+              className="font-mono uppercase tracking-wider"
+              style={{ fontSize: '8px', color: hud.ia ? '#00FF0080' : 'rgba(255,255,255,0.12)' }}
+            >
+              IA
+            </span>
+          </div>
 
           {/* Armed indicator — far right */}
           <div className="ml-auto flex items-center gap-1">
