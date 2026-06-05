@@ -9,6 +9,7 @@ import { useSentraCore } from '../hooks/useSentraCore';
 import { mesh } from '../lib/SentraMesh';
 import AudioEngine from './AudioEngine';
 import type { AudioAlertLog } from './AudioEngine';
+import { pipedreamOrchestrator } from '../lib/pipedream';
 
 const SentraVisionPanel = lazy(() => import('./SentraVisionPanel'));
 const SentraIAPanel     = lazy(() => import('./SentraIAPanel'));
@@ -248,6 +249,13 @@ export default function SentraHUD() {
       setShowIA(true);
       addLog('SentraVision + SentraIA + AudioEngine cargados', 'ok');
       triggerHaptic([100, 50, 100]);
+      pipedreamOrchestrator.dispatchInteraction({
+        action: 'SYSTEM_ARMED',
+        phase: 'ARMED',
+        geo: { latitude: geo.latitude, longitude: geo.longitude ?? null, address: geo.address },
+        timestamp: Date.now(),
+        operator: 'Matías',
+      });
     } else {
       addLog('Desarmando...', 'warn');
       await disarm();
@@ -256,9 +264,16 @@ export default function SentraHUD() {
       setShowIA(false);
       addLog('Sistema DESARMADO', 'sys');
       triggerHaptic([300]);
+      pipedreamOrchestrator.dispatchInteraction({
+        action: 'SYSTEM_DISARMED',
+        phase: 'STANDBY',
+        geo: { latitude: geo.latitude, longitude: geo.longitude ?? null, address: geo.address },
+        timestamp: Date.now(),
+        operator: 'Matías',
+      });
     }
     setArming(false);
-  }, [armed, arming, arm, disarm, addLog, triggerHaptic]);
+  }, [armed, arming, arm, disarm, addLog, triggerHaptic, geo]);
 
   const color = PHASE_COLOR[phase];
 

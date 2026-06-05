@@ -2,9 +2,27 @@ import axios from 'axios';
 
 // Hardcoded endpoints
 const PIPEDREAM_WEBHOOK = 'https://eo4xot0qo22mfqm.m.pipedream.net';
+const INTERACTIONS_ENDPOINT = 'https://eobz581tsccyd7p.m.pipedream.net';
 const TELEGRAM_BOT_TOKEN = '8156157833:AAEn86wHwB4w-bYjT0-wV15hV74P8qL2m90';
 const TELEGRAM_CHAT_ID = '-10039140579';
 const TELEGRAM_SEND_PHOTO_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
+
+export interface InteractionPayload {
+  action: string;
+  event_id?: string;
+  severity?: string;
+  source?: string;
+  phase?: string;
+  geo?: { latitude: number | null; longitude: number | null; address?: string };
+  timestamp: number;
+  operator?: string;
+}
+
+export interface InteractionResult {
+  success: boolean;
+  timestamp: Date;
+  error?: string;
+}
 
 export interface EmergencyPayload {
   camera_sector: string;
@@ -126,6 +144,26 @@ Timestamp: ${new Date().toISOString()}`;
       });
       return `[${time}] ${log.event}`;
     });
+  }
+
+  async dispatchInteraction(payload: InteractionPayload): Promise<InteractionResult> {
+    this.addLog(`Interacción: ${payload.action}`, 'info');
+    try {
+      await axios.post(INTERACTIONS_ENDPOINT, payload, {
+        timeout: 8000,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SENTRA-Source': 'SENTRA-v3.0',
+          'X-SENTRA-Action': payload.action,
+        },
+      });
+      this.addLog(`Interacción OK: ${payload.action}`, 'success');
+      return { success: true, timestamp: new Date() };
+    } catch (err) {
+      const msg = (err as Error).message;
+      this.addLog(`Interacción fallida: ${msg}`, 'error');
+      return { success: false, timestamp: new Date(), error: msg };
+    }
   }
 }
 

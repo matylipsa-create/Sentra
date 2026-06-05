@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Shield, AlertTriangle, CheckCircle, Clock, RefreshCw, Zap, WifiOff } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Clock, RefreshCw, Zap, WifiOff, Loader } from 'lucide-react';
 import type { SecurityLog, Severity } from '../types';
+import { pipedreamOrchestrator } from '../lib/pipedream';
 
 const OPERATIONS_ENDPOINT = 'https://eo4xot0qo22mfqm.m.pipedream.net';
 const MAX_EVENTS = 5;
@@ -78,7 +79,7 @@ function timeAgo(date: Date): string {
   return `${Math.floor(hrs / 24)}d`;
 }
 
-function LogRow({ log, onResolve, isNew }: { log: SecurityLog; onResolve: (id: string) => void; isNew?: boolean }) {
+function LogRow({ log, onResolve, isNew, resolving }: { log: SecurityLog; onResolve: (id: string) => void; isNew?: boolean; resolving?: boolean }) {
   const cfg = SEVERITY_CONFIG[log.severity];
   return (
     <div className={`rounded-xl border p-3 transition-all duration-500 ${log.resolved ? 'opacity-50' : ''} ${cfg.border} ${cfg.bg} ${isNew ? 'ring-1 ring-blue-400/40' : ''}`}>
@@ -103,9 +104,12 @@ function LogRow({ log, onResolve, isNew }: { log: SecurityLog; onResolve: (id: s
           ) : (
             <button
               onClick={() => onResolve(log.id)}
-              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-gray-400 hover:text-white transition-all"
+              disabled={resolving}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-gray-400 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Resolver
+              {resolving
+                ? <><Loader size={10} className="animate-spin" />Enviando...</>
+                : 'Resolver'}
             </button>
           )}
         </div>
@@ -120,6 +124,7 @@ export default function Operations() {
   const [refreshing, setRefreshing] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [filter, setFilter] = useState<'all' | Severity | 'unresolved'>('all');
+  const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
   const highlightTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   function ingestEvents(incoming: SecurityLog[]) {
@@ -182,8 +187,23 @@ export default function Operations() {
     };
   }, []);
 
-  const handleResolve = (id: string) => {
+  const handleResolve = async (id: string) => {
+    const log = logs.find((l) => l.id === id);
+    if (!log) return;
+
+    setResolvingIds((prev) => { const n = new Set(prev); n.add(id); return n; });
+
+    await pipedreamOrchestrator.dispatchInteraction({
+      action: 'RESOLVE_ALERT',
+      event_id: log.id,
+      severity: log.severity,
+      source: log.source,
+      timestamp: Date.now(),
+      operator: 'Matías',
+    });
+
     setLogs((prev) => prev.map((l) => (l.id === id ? { ...l, resolved: true } : l)));
+    setResolvingIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
   };
 
   const filteredLogs = logs.filter((l) => {
@@ -277,7 +297,7 @@ export default function Operations() {
           </div>
         ) : (
           filteredLogs.map((log) => (
-            <LogRow key={log.id} log={log} onResolve={handleResolve} isNew={newIds.has(log.id)} />
+            <LogRow key={log.id} log={log} onResolve={handleResolve} isNew={newIds.has(log.id)} resolving={resolvingIds.has(log.id)} />
           ))
         )}
       </div>
