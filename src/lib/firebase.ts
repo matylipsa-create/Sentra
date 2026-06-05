@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyBv-G37kX92pQ_m8L4v93b7X1z92_Bc',
+  apiKey: 'AIzaSyBvG37kX92pQ_m8L4v93b7X1z92_Bc',
   authDomain: 'sentra-security-system.firebaseapp.com',
   projectId: 'sentra-security-system',
   storageBucket: 'sentra-security-system.firebasestorage.app',
@@ -11,7 +11,7 @@ const firebaseConfig = {
   measurementId: 'G-F65H5NMYZ9',
 };
 
-const app  = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
