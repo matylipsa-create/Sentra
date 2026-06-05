@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Shield, Fingerprint, AlertTriangle, Loader } from 'lucide-react';
 import { mesh } from '../lib/SentraMesh';
+import { firebaseGoogleSignIn, checkRedirectResult } from '../lib/firebase';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,14 +66,17 @@ async function webAuthnAuthenticate(): Promise<PublicKeyCredential> {
   return navigator.credentials.get({ publicKey: opts }) as Promise<PublicKeyCredential>;
 }
 
-// ── Google OAuth stub ──────────────────────────────────────────────────────
-// Replace this with your Firebase SDK call once integrated.
-// e.g.:  import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
-//        const result = await signInWithPopup(auth, new GoogleAuthProvider())
+// ── Google OAuth via Firebase ──────────────────────────────────────────────
 
 async function googleSignIn(): Promise<SentraUser> {
-  // TODO: swap for Firebase implementation
-  throw new Error('GOOGLE_NOT_CONFIGURED');
+  const result = await firebaseGoogleSignIn();
+  return {
+    uid:         result.uid,
+    email:       result.email,
+    displayName: result.displayName,
+    photoURL:    result.photoURL,
+    method:      'GOOGLE',
+  };
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -106,11 +110,7 @@ export default function SentraAuth({ onAuthenticated }: Props) {
       await handleSuccess(user);
     } catch (e) {
       const err = e as Error;
-      handleError(
-        err.message === 'GOOGLE_NOT_CONFIGURED'
-          ? 'Google Auth no configurado. Integra Firebase SDK.'
-          : 'Error de autenticación Google.'
-      );
+      handleError('Error de autenticación Google: ' + (err.message ?? 'intenta de nuevo'));
     }
   }, [handleSuccess, handleError]);
 
@@ -160,6 +160,20 @@ export default function SentraAuth({ onAuthenticated }: Props) {
       }
     }
   }, [handleSuccess, handleError]);
+
+  // ── Handle mobile redirect result on mount ──────────────────────────────
+  useEffect(() => {
+    checkRedirectResult().then((result) => {
+      if (!result) return;
+      handleSuccess({
+        uid:         result.uid,
+        email:       result.email,
+        displayName: result.displayName,
+        photoURL:    result.photoURL,
+        method:      'GOOGLE',
+      });
+    });
+  }, [handleSuccess]);
 
   // ── Colours ────────────────────────────────────────────────────────────────
   const G = '#00FF00';
