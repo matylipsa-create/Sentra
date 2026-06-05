@@ -2,8 +2,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Volume2, VolumeX, Mic, MicOff, Cpu, Anchor, Eye, Loader, WifiOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSpeech } from '../hooks/useSpeech';
-import { PIPEDREAM_ENDPOINT } from '../config';
 import type { ChatMessage, AgentName } from '../types';
+
+const REGULATION_ENDPOINT = 'https://eohmxy72d8jcync.m.pipedream.net';
 
 const AGENT_COLORS: Record<AgentName, string> = {
   Anchor: '#10b981',
@@ -31,7 +32,7 @@ async function queryPipedream(
   mode: string
 ): Promise<{ agent: AgentName; text: string } | null> {
   try {
-    const res = await fetch(PIPEDREAM_ENDPOINT, {
+    const res = await fetch(REGULATION_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
