@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBvG37kX92pQ_m8L4v93b7X1z92_Bc",
@@ -16,26 +16,11 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Kept for SentraAuth.tsx compatibility
-export const firebaseAuth = auth;
-
-function isMobile(): boolean {
-  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-}
-
-export async function firebaseGoogleSignIn(): Promise<{
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
-}> {
-  if (isMobile()) {
-    await signInWithRedirect(auth, googleProvider);
-    return new Promise(() => {});
-  }
-  const result = await signInWithPopup(auth, googleProvider);
-  const { uid, email, displayName, photoURL } = result.user;
-  return { uid, email, displayName, photoURL };
+// Always use redirect — avoids popup-blocked across all browsers and WebViews
+export async function firebaseGoogleSignIn(): Promise<never> {
+  await signInWithRedirect(auth, googleProvider);
+  // signInWithRedirect navigates away; this line is never reached
+  return new Promise(() => {});
 }
 
 export async function checkRedirectResult(): Promise<{

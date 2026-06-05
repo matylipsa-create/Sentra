@@ -17,7 +17,7 @@ interface Props {
   onAuthenticated: (user: SentraUser) => void;
 }
 
-type AuthState = 'IDLE' | 'LOADING_GOOGLE' | 'LOADING_BIO' | 'ERROR';
+type AuthState = 'IDLE' | 'LOADING_GOOGLE' | 'LOADING_BIO' | 'REDIRECT_PENDING' | 'ERROR';
 
 // ── WebAuthn helpers ───────────────────────────────────────────────────────
 
@@ -161,25 +161,31 @@ export default function SentraAuth({ onAuthenticated }: Props) {
     }
   }, [handleSuccess, handleError]);
 
-  // ── Handle mobile redirect result on mount ──────────────────────────────
+  // ── Handle redirect result on mount (user returning from Google) ───────────
   useEffect(() => {
-    checkRedirectResult().then((result) => {
-      if (!result) return;
-      handleSuccess({
-        uid:         result.uid,
-        email:       result.email,
-        displayName: result.displayName,
-        photoURL:    result.photoURL,
-        method:      'GOOGLE',
-      });
-    });
+    setAuthState('REDIRECT_PENDING');
+    checkRedirectResult()
+      .then((result) => {
+        if (!result) {
+          setAuthState('IDLE');
+          return;
+        }
+        handleSuccess({
+          uid:         result.uid,
+          email:       result.email,
+          displayName: result.displayName,
+          photoURL:    result.photoURL,
+          method:      'GOOGLE',
+        });
+      })
+      .catch(() => setAuthState('IDLE'));
   }, [handleSuccess]);
 
   // ── Colours ────────────────────────────────────────────────────────────────
   const G = '#00FF00';
   const C = '#00BFFF';
 
-  const isLoading = authState === 'LOADING_GOOGLE' || authState === 'LOADING_BIO';
+  const isLoading = authState === 'LOADING_GOOGLE' || authState === 'LOADING_BIO' || authState === 'REDIRECT_PENDING';
 
   return (
     <div
@@ -260,7 +266,7 @@ export default function SentraAuth({ onAuthenticated }: Props) {
             opacity:      isLoading && authState !== 'LOADING_GOOGLE' ? 0.4 : 1,
           }}
         >
-          {authState === 'LOADING_GOOGLE' ? (
+          {authState === 'LOADING_GOOGLE' || authState === 'REDIRECT_PENDING' ? (
             <Loader size={14} style={{ color: G }} className="animate-spin" />
           ) : (
             // Google "G" mark — inline SVG to avoid external dependency
@@ -272,7 +278,11 @@ export default function SentraAuth({ onAuthenticated }: Props) {
             </svg>
           )}
           <span style={{ color: G, fontFamily: 'monospace', fontSize: '11px', letterSpacing: '0.15em', fontWeight: 600 }}>
-            {authState === 'LOADING_GOOGLE' ? 'AUTENTICANDO...' : 'ACCESO CON GOOGLE'}
+            {authState === 'LOADING_GOOGLE'
+              ? 'REDIRIGIENDO...'
+              : authState === 'REDIRECT_PENDING'
+              ? 'VERIFICANDO SESIÓN...'
+              : 'ACCESO CON GOOGLE'}
           </span>
         </button>
 
