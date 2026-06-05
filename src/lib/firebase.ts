@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyBv-placeholder-replace-with-real-key',
+  apiKey: 'AIzaSyBv-G37kX92pQ_m8L4v93b7X1z92_Bc',
   authDomain: 'sentra-security-system.firebaseapp.com',
   projectId: 'sentra-security-system',
   storageBucket: 'sentra-security-system.firebasestorage.app',
