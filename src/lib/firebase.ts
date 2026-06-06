@@ -2,13 +2,13 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBvG37kX92pQ_m8L4v93b7X1z92_Bc",
+  apiKey: "AIzaSyCQq4n0jI40glv8vDbQZNtN_nAzj8tZ138",
   authDomain: "sentra-security-system.firebaseapp.com",
   projectId: "sentra-security-system",
   storageBucket: "sentra-security-system.firebasestorage.app",
-  messagingSenderId: "105312015243",
-  appId: "1:105312015243:web:757e84bf9a8972109677e5",
-  measurementId: "G-F65H5NMYZ9"
+  messagingSenderId: "199332945502",
+  appId: "1:199332945502:web:80849d2eab3a8dfb8d9ecf",
+  measurementId: "G-5985BMM938"
 };
 
 const app = initializeApp(firebaseConfig);
