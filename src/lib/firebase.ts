@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCQq4nOjI40glv8vDbQZNtN_nAzj8tZ138",
@@ -15,31 +15,25 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-export const googleProvider = new GoogleAuthProvider();
+const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
-  client_id: "199332945502-85kfbpqiir99fhbl9arap2alrle4sn77.apps.googleusercontent.com"
+  client_id: "199332945502-85kfbpqiir99fhbl9arap2alrle4sn77.apps.googleusercontent.com",
+  prompt: "select_account",
 });
 
-// Always use redirect — avoids popup-blocked across all browsers and WebViews
-export async function firebaseGoogleSignIn(): Promise<never> {
-  await signInWithRedirect(auth, googleProvider);
-  // signInWithRedirect navigates away; this line is never reached
-  return new Promise(() => {});
-}
-
-export async function checkRedirectResult(): Promise<{
+export interface GoogleResult {
   uid: string;
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
-} | null> {
-  try {
-    const result = await getRedirectResult(auth);
-    if (!result) return null;
-    const { uid, email, displayName, photoURL } = result.user;
-    return { uid, email, displayName, photoURL };
-  } catch (err) {
-    console.error('[SENTRA] Firebase redirect result error:', err);
-    return null;
-  }
+}
+
+/**
+ * Opens a popup — resolves on the SAME page load with the user object.
+ * No redirect, no page reload, no re-render loop.
+ */
+export async function firebaseGoogleSignIn(): Promise<GoogleResult> {
+  const result = await signInWithPopup(auth, googleProvider);
+  const { uid, email, displayName, photoURL } = result.user;
+  return { uid, email, displayName, photoURL };
 }

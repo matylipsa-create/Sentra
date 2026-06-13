@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Shield, Fingerprint, AlertTriangle, Loader, CheckCircle, ArrowRight } from 'lucide-react';
 import { mesh } from '../lib/SentraMesh';
-import { firebaseGoogleSignIn, checkRedirectResult } from '../lib/firebase';
+import { firebaseGoogleSignIn, type GoogleResult } from '../lib/firebase';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,13 +17,20 @@ interface Props {
   onAuthenticated: (user: SentraUser) => void;
 }
 
-type AuthState =
-  | 'IDLE'
-  | 'LOADING_GOOGLE'
-  | 'REDIRECT_PENDING'
-  | 'PENDING_BIOMETRIC'
-  | 'LOADING_BIO'
-  | 'ERROR';
+/**
+ * Auth states — strictly linear, no loops:
+ *
+ *   IDLE  ──[Google btn]──▶  LOADING_GOOGLE
+ *                                  │
+ *                            popup resolves
+ *                                  │
+ *                         PENDING_BIOMETRIC  ──[Bio btn]──▶  LOADING_BIO
+ *                                                                  │
+ *                                                           bio resolves
+ *                                                                  │
+ *                                                           onAuthenticated()
+ */
+type AuthState = 'IDLE' | 'LOADING_GOOGLE' | 'PENDING_BIOMETRIC' | 'LOADING_BIO';
 
 // ── WebAuthn helpers ───────────────────────────────────────────────────────
 
@@ -57,7 +64,7 @@ async function webAuthnRegister(userId: string): Promise<PublicKeyCredential> {
   return navigator.credentials.create({ publicKey: opts }) as Promise<PublicKeyCredential>;
 }
 
-async function webAuthnAuthenticate(): Promise<PublicKeyCredential> {
+async function webAuthnAuthenticate(): Promise<void> {
   const stored = JSON.parse(localStorage.getItem('sentra_bio_cred') || 'null');
   const opts: PublicKeyCredentialRequestOptions = {
     challenge: randomBuffer(32),
@@ -68,114 +75,129 @@ async function webAuthnAuthenticate(): Promise<PublicKeyCredential> {
       ? { allowCredentials: [{ type: 'public-key', id: Uint8Array.from(atob(stored.id), (c) => c.charCodeAt(0)) }] }
       : {}),
   };
-  return navigator.credentials.get({ publicKey: opts }) as Promise<PublicKeyCredential>;
+  await navigator.credentials.get({ publicKey: opts });
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function SentraAuth({ onAuthenticated }: Props) {
-  const [authState, setAuthState]   = useState<AuthState>('IDLE');
-  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
-  const [googleUser, setGoogleUser] = useState<Omit<SentraUser, 'method'> | null>(null);
+  // authState drives the UI — one direction only, never goes backwards
+  const [authState, setAuthState] = useState<AuthState>('IDLE');
+  const [errorMsg,  setErrorMsg]  = useState<string | null>(null);
 
-  // ── Final grant ───────────────────────────────────────────────────────────
-  const grantAccess = useCallback(async (user: SentraUser) => {
-    await mesh.emit('SYSTEM_ARMED' as any, { method: user.method, uid: user.uid, ts: Date.now() });
-    setAuthState('IDLE');
-    onAuthenticated(user);
-  }, [onAuthenticated]);
+  // googleUser is set once when Google popup resolves and never cleared
+  const googleUserRef = useRef<GoogleResult | null>(null);
+  const [googleUser, setGoogleUser] = useState<GoogleResult | null>(null);
 
-  const handleError = useCallback((msg: string) => {
-    setAuthState((prev) => (prev === 'PENDING_BIOMETRIC' ? 'PENDING_BIOMETRIC' : 'ERROR'));
+  // ── Error display (non-fatal for bio step, fatal for Google step) ─────────
+  const showError = (msg: string, returnTo: AuthState) => {
     setErrorMsg(msg);
-    setTimeout(() => { setErrorMsg(null); }, 4000);
-  }, []);
+    setAuthState(returnTo);
+    setTimeout(() => setErrorMsg(null), 5000);
+  };
 
-  // ── Step 1 — Google ───────────────────────────────────────────────────────
+  // ── Step 1: Google popup ──────────────────────────────────────────────────
   const onGoogle = useCallback(async () => {
+    if (authState !== 'IDLE') return; // guard: only callable from IDLE
     setAuthState('LOADING_GOOGLE');
     setErrorMsg(null);
+
     try {
-      await firebaseGoogleSignIn();
+      const result = await firebaseGoogleSignIn();
+      // Store in both ref (for bio callback closure) and state (for render)
+      googleUserRef.current = result;
+      setGoogleUser(result);
+      // Immediately advance to step 2 — no re-render gap
+      setAuthState('PENDING_BIOMETRIC');
     } catch (e) {
       const err = e as Error;
-      handleError('Error Google: ' + (err.message ?? 'intenta de nuevo'));
-      setAuthState('IDLE');
+      // popup-closed-by-user is not an error worth showing
+      if ((err as any).code === 'auth/popup-closed-by-user' ||
+          (err as any).code === 'auth/cancelled-popup-request') {
+        setAuthState('IDLE');
+      } else {
+        showError('Error Google: ' + (err.message ?? 'intenta de nuevo'), 'IDLE');
+      }
     }
-  }, [handleError]);
+  }, [authState]);
 
-  // ── Step 2 — Biometric ────────────────────────────────────────────────────
+  // ── Step 2: Biometric (WebAuthn) ──────────────────────────────────────────
   const onBiometric = useCallback(async () => {
+    if (authState !== 'PENDING_BIOMETRIC') return; // guard: only callable from step 2
+
     if (!window.PublicKeyCredential) {
-      handleError('WebAuthn no soportado en este dispositivo.');
+      showError('WebAuthn no soportado en este dispositivo.', 'PENDING_BIOMETRIC');
       return;
     }
+
     setAuthState('LOADING_BIO');
     setErrorMsg(null);
+
     try {
       const hasCred = !!localStorage.getItem('sentra_bio_cred');
+
       if (hasCred) {
         await webAuthnAuthenticate();
       } else {
-        const uid = googleUser?.uid ?? `sentra-op-${Date.now()}`;
+        // First-time: register with the Google uid so the cred is tied to this operator
+        const uid = googleUserRef.current?.uid ?? `sentra-op-${Date.now()}`;
         const cred = await webAuthnRegister(uid);
         const rawId = new Uint8Array((cred as any).rawId);
         const b64   = btoa(String.fromCharCode(...rawId));
         localStorage.setItem('sentra_bio_cred', JSON.stringify({ id: b64, uid }));
       }
-      const base = googleUser ?? JSON.parse(localStorage.getItem('sentra_bio_cred')!);
-      await grantAccess({
-        uid:         base.uid ?? 'operator',
-        email:       (base as any).email ?? null,
-        displayName: (base as any).displayName ?? 'SENTRA Operator',
-        photoURL:    (base as any).photoURL ?? null,
+
+      // Both factors confirmed — emit and grant access
+      const gu = googleUserRef.current;
+      const finalUser: SentraUser = {
+        uid:         gu?.uid         ?? `sentra-op-${Date.now()}`,
+        email:       gu?.email       ?? null,
+        displayName: gu?.displayName ?? 'SENTRA Operator',
+        photoURL:    gu?.photoURL    ?? null,
         method:      'BIOMETRIC',
+      };
+
+      await mesh.emit('SYSTEM_ARMED' as any, {
+        method: 'BIOMETRIC',
+        uid: finalUser.uid,
+        ts: Date.now(),
       });
+
+      // Call parent — App.tsx will unmount this component and mount the dashboard
+      onAuthenticated(finalUser);
+
     } catch (e) {
       const err = e as DOMException;
       if (err.name === 'NotAllowedError') {
-        handleError('Biometría cancelada o denegada.');
+        showError('Biometría cancelada o denegada. Intentá de nuevo.', 'PENDING_BIOMETRIC');
       } else if (err.name === 'InvalidStateError') {
-        handleError('Credencial ya registrada. Intenta nuevamente.');
+        // Cred already registered — try assertion instead
+        localStorage.removeItem('sentra_bio_cred');
+        showError('Credencial inválida. Se reinició el registro. Intentá de nuevo.', 'PENDING_BIOMETRIC');
       } else {
-        handleError('Error biométrico: ' + err.message);
+        showError('Error biométrico: ' + err.message, 'PENDING_BIOMETRIC');
       }
-      setAuthState('PENDING_BIOMETRIC');
     }
-  }, [googleUser, grantAccess, handleError]);
+  }, [authState, onAuthenticated]);
 
-  // ── Handle Google redirect return ─────────────────────────────────────────
-  useEffect(() => {
-    setAuthState('REDIRECT_PENDING');
-    checkRedirectResult()
-      .then((result) => {
-        if (!result) { setAuthState('IDLE'); return; }
-        setGoogleUser(result);
-        setAuthState('PENDING_BIOMETRIC');
-      })
-      .catch(() => setAuthState('IDLE'));
-  }, []);
-
-  // ── Derived ───────────────────────────────────────────────────────────────
-  const isStep2 = authState === 'PENDING_BIOMETRIC' || authState === 'LOADING_BIO';
-  const isBusy  = authState === 'LOADING_GOOGLE' || authState === 'REDIRECT_PENDING' || authState === 'LOADING_BIO';
+  // ── Derived flags ─────────────────────────────────────────────────────────
+  const isStep2    = authState === 'PENDING_BIOMETRIC' || authState === 'LOADING_BIO';
+  const isGoogleBusy = authState === 'LOADING_GOOGLE';
+  const isBioBusy    = authState === 'LOADING_BIO';
 
   const ACCENT = '#00FF88';
   const BLUE   = '#38BDF8';
-  const BG     = '#0f172a';
 
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center"
-      style={{ background: `radial-gradient(ellipse at 50% 20%, #0f2545 0%, ${BG} 70%)` }}
+      style={{ background: 'radial-gradient(ellipse at 50% 20%, #0f2545 0%, #0f172a 70%)' }}
     >
-      {/* Subtle scanline vignette — borders only */}
+      {/* Perimeter vignette */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background:
-            'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%)',
-          backgroundBlendMode: 'multiply',
+          background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%)',
           zIndex: 0,
         }}
       />
@@ -214,7 +236,8 @@ export default function SentraAuth({ onAuthenticated }: Props) {
           </div>
           <div className="text-center">
             <p style={{
-              color: '#FFFFFF', fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
+              color: '#FFFFFF',
+              fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
               fontSize: '22px', letterSpacing: '0.22em', fontWeight: 700,
             }}>
               SENTRA
@@ -230,7 +253,6 @@ export default function SentraAuth({ onAuthenticated }: Props) {
 
         {/* 2-step progress indicator */}
         <div className="w-full flex items-center gap-2 px-2">
-          {/* Step 1 */}
           <div className="flex items-center gap-1.5 flex-1">
             <div
               className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-500"
@@ -245,7 +267,7 @@ export default function SentraAuth({ onAuthenticated }: Props) {
             </div>
             <span style={{
               color: isStep2 ? `${ACCENT}80` : '#94A3B8',
-              fontSize: '9px', fontFamily: "'Inter', system-ui, sans-serif",
+              fontSize: '9px', fontFamily: "'Inter', system-ui",
               letterSpacing: '0.1em', fontWeight: 500,
             }}>
               GOOGLE
@@ -254,11 +276,10 @@ export default function SentraAuth({ onAuthenticated }: Props) {
 
           <ArrowRight size={12} style={{ color: '#334155', flexShrink: 0 }} />
 
-          {/* Step 2 */}
           <div className="flex items-center gap-1.5 flex-1 justify-end">
             <span style={{
               color: isStep2 ? '#FFFFFF' : '#475569',
-              fontSize: '9px', fontFamily: "'Inter', system-ui, sans-serif",
+              fontSize: '9px', fontFamily: "'Inter', system-ui",
               letterSpacing: '0.1em', fontWeight: isStep2 ? 600 : 400,
             }}>
               BIOMÉTRICO
@@ -297,22 +318,22 @@ export default function SentraAuth({ onAuthenticated }: Props) {
           </div>
         )}
 
-        {/* ── Step 1: Google button (hidden once biometric step reached) ── */}
+        {/* ── STEP 1: Google button ── */}
         {!isStep2 && (
           <button
             onClick={onGoogle}
-            disabled={isBusy}
+            disabled={isGoogleBusy}
             className="w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200 active:scale-[0.98]"
             style={{
               padding:    '14px 20px',
               minHeight:  '52px',
-              background: isBusy ? 'rgba(56,189,248,0.08)' : 'rgba(56,189,248,0.06)',
-              border:     `1px solid rgba(56,189,248,${isBusy ? '0.4' : '0.2'})`,
-              boxShadow:  isBusy ? '0 0 16px rgba(56,189,248,0.12)' : 'none',
-              cursor:     isBusy ? 'not-allowed' : 'pointer',
+              background: isGoogleBusy ? 'rgba(56,189,248,0.08)' : 'rgba(56,189,248,0.06)',
+              border:     `1px solid rgba(56,189,248,${isGoogleBusy ? '0.4' : '0.2'})`,
+              boxShadow:  isGoogleBusy ? '0 0 16px rgba(56,189,248,0.12)' : 'none',
+              cursor:     isGoogleBusy ? 'not-allowed' : 'pointer',
             }}
           >
-            {isBusy ? (
+            {isGoogleBusy ? (
               <Loader size={16} style={{ color: BLUE }} className="animate-spin" />
             ) : (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -323,22 +344,19 @@ export default function SentraAuth({ onAuthenticated }: Props) {
               </svg>
             )}
             <span style={{
-              color: '#FFFFFF', fontFamily: "'Inter', system-ui, sans-serif",
+              color: '#FFFFFF',
+              fontFamily: "'Inter', system-ui, sans-serif",
               fontSize: '13px', fontWeight: 600, letterSpacing: '0.06em',
             }}>
-              {authState === 'LOADING_GOOGLE'
-                ? 'REDIRIGIENDO...'
-                : authState === 'REDIRECT_PENDING'
-                ? 'VERIFICANDO SESIÓN...'
-                : 'Continuar con Google'}
+              {isGoogleBusy ? 'Abriendo Google...' : 'Continuar con Google'}
             </span>
           </button>
         )}
 
-        {/* ── Step 2: Biometric button (shown after Google success) ── */}
+        {/* ── STEP 2: Biometric button (shown only after Google resolves) ── */}
         {isStep2 && (
           <>
-            {/* Google identity confirmed chip */}
+            {/* Google identity chip */}
             {googleUser && (
               <div
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
@@ -348,7 +366,7 @@ export default function SentraAuth({ onAuthenticated }: Props) {
                 <div className="flex flex-col min-w-0">
                   <span style={{
                     color: '#FFFFFF', fontSize: '11px',
-                    fontFamily: "'Inter', system-ui", fontWeight: 600, letterSpacing: '0.02em',
+                    fontFamily: "'Inter', system-ui", fontWeight: 600,
                   }}>
                     {googleUser.displayName ?? googleUser.email ?? 'Operador'}
                   </span>
@@ -376,36 +394,36 @@ export default function SentraAuth({ onAuthenticated }: Props) {
 
             <button
               onClick={onBiometric}
-              disabled={authState === 'LOADING_BIO'}
+              disabled={isBioBusy}
               className="w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200 active:scale-[0.98]"
               style={{
                 padding:    '14px 20px',
                 minHeight:  '52px',
-                background: authState === 'LOADING_BIO'
+                background: isBioBusy
                   ? `${ACCENT}12`
                   : `linear-gradient(135deg, ${ACCENT}14 0%, ${ACCENT}08 100%)`,
-                border:     `1px solid ${ACCENT}${authState === 'LOADING_BIO' ? '60' : '35'}`,
-                boxShadow:  authState === 'LOADING_BIO' ? `0 0 20px ${ACCENT}18` : 'none',
-                cursor:     authState === 'LOADING_BIO' ? 'not-allowed' : 'pointer',
+                border:     `1px solid ${ACCENT}${isBioBusy ? '60' : '35'}`,
+                boxShadow:  isBioBusy ? `0 0 20px ${ACCENT}18` : 'none',
+                cursor:     isBioBusy ? 'not-allowed' : 'pointer',
               }}
             >
-              {authState === 'LOADING_BIO' ? (
+              {isBioBusy ? (
                 <Loader size={16} style={{ color: ACCENT }} className="animate-spin" />
               ) : (
                 <Fingerprint size={18} style={{ color: ACCENT }} />
               )}
               <span style={{
-                color: authState === 'LOADING_BIO' ? `${ACCENT}80` : '#FFFFFF',
+                color: isBioBusy ? `${ACCENT}80` : '#FFFFFF',
                 fontFamily: "'Inter', system-ui, sans-serif",
                 fontSize: '13px', fontWeight: 600, letterSpacing: '0.06em',
               }}>
-                {authState === 'LOADING_BIO' ? 'Verificando...' : 'Acceso Biométrico'}
+                {isBioBusy ? 'Verificando...' : 'Acceso Biométrico'}
               </span>
             </button>
           </>
         )}
 
-        {/* Footer — minimal, no clutter */}
+        {/* Footer */}
         <p style={{
           color: '#1E293B', fontFamily: 'monospace',
           fontSize: '8px', letterSpacing: '0.18em', textAlign: 'center',
