@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCQq4n0jI40glv8vDbQZNtN_nAzj8tZ138",
+  apiKey: "AIzaSyCQq4nOjI40glv8vDbQZNtN_nAzj8tZ138",
   authDomain: "sentra-security-system.firebaseapp.com",
   projectId: "sentra-security-system",
   storageBucket: "sentra-security-system.firebasestorage.app",
@@ -14,7 +14,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  client_id: "199332945502-85kfbpqiir99fhbl9arap2alrle4sn77.apps.googleusercontent.com"
+});
 
 // Always use redirect — avoids popup-blocked across all browsers and WebViews
 export async function firebaseGoogleSignIn(): Promise<never> {
