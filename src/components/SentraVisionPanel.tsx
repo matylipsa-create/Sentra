@@ -360,22 +360,42 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
           muted
           playsInline
           crossOrigin="anonymous"
-          className="w-full h-full object-cover opacity-80"
-          style={{ filter: 'brightness(0.9) hue-rotate(90deg) saturate(0.3)' }}
+          className="w-full h-full object-cover"
+          style={{ filter: 'brightness(1.0) contrast(1.05)' }}
         />
         <canvas ref={canvasRef} className="hidden" />
 
         {/* HUD overlay — pointer-events-none */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-0 border" style={{ borderColor }} />
+          {/* Outer border — thin, tactical */}
+          <div className="absolute inset-0" style={{ border: `1px solid ${borderColor}` }} />
 
-          {/* Corner brackets */}
-          {(['top-1 left-1', 'top-1 right-1', 'bottom-1 left-1', 'bottom-1 right-1'] as const).map((pos, i) => (
-            <div key={i} className={`absolute ${pos} w-3 h-3`} style={{
-              borderTop:    i < 2       ? `2px solid ${hasThreat ? R : G}` : 'none',
-              borderBottom: i >= 2      ? `2px solid ${hasThreat ? R : G}` : 'none',
-              borderLeft:   i % 2 === 0 ? `2px solid ${hasThreat ? R : G}` : 'none',
-              borderRight:  i % 2 === 1 ? `2px solid ${hasThreat ? R : G}` : 'none',
+          {/* Edge scanline vignette — only on perimeter, center clear */}
+          <div className="absolute inset-0" style={{
+            background: `
+              linear-gradient(to bottom,
+                rgba(0,255,128,0.04) 0px, rgba(0,255,128,0.04) 1px,
+                transparent 1px, transparent 3px,
+                rgba(0,255,128,0.02) 3px, rgba(0,255,128,0.02) 4px,
+                transparent 4px
+              )`,
+            backgroundSize: '100% 4px',
+            maskImage: 'radial-gradient(ellipse 90% 80% at center, transparent 55%, black 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 90% 80% at center, transparent 55%, black 100%)',
+          }} />
+
+          {/* Corner brackets — larger, more tactical */}
+          {[
+            { pos: 'top-2 left-2',    bt: true,  bb: false, bl: true,  br: false },
+            { pos: 'top-2 right-2',   bt: true,  bb: false, bl: false, br: true  },
+            { pos: 'bottom-2 left-2', bt: false, bb: true,  bl: true,  br: false },
+            { pos: 'bottom-2 right-2',bt: false, bb: true,  bl: false, br: true  },
+          ].map(({ pos, bt, bb, bl, br }, i) => (
+            <div key={i} className={`absolute ${pos} w-5 h-5`} style={{
+              borderTop:    bt ? `2px solid ${hasThreat ? R : G}` : 'none',
+              borderBottom: bb ? `2px solid ${hasThreat ? R : G}` : 'none',
+              borderLeft:   bl ? `2px solid ${hasThreat ? R : G}` : 'none',
+              borderRight:  br ? `2px solid ${hasThreat ? R : G}` : 'none',
             }} />
           ))}
 
