@@ -88,7 +88,8 @@ export default function AudioEngine({ geo, onAlert }: Props) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef   = useRef<MediaStream | null>(null);
   const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recRef      = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recRef      = useRef<any>(null);
   const mountedRef  = useRef(true);
 
   // Cooldown per alert type to avoid spam
@@ -178,15 +179,16 @@ export default function AudioEngine({ geo, onAlert }: Props) {
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) return;
 
-    const rec: SpeechRecognition = new SpeechRec();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new SpeechRec();
     rec.lang             = 'es-AR';
     rec.continuous       = true;
     rec.interimResults   = true;
     rec.maxAlternatives  = 1;
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(e.results)
-        .map((r) => r[0].transcript.toLowerCase())
+    rec.onresult = (e: any) => {
+      const transcript = Array.from(e.results as any[])
+        .map((r: any) => r[0].transcript.toLowerCase())
         .join(' ');
 
       for (const kw of KEYWORDS) {
@@ -202,7 +204,7 @@ export default function AudioEngine({ geo, onAlert }: Props) {
       if (mountedRef.current) rec.start();
     };
 
-    rec.onerror = (e) => {
+    rec.onerror = (e: any) => {
       // 'no-speech' is benign; other errors log and retry after 2s
       if (e.error !== 'no-speech' && mountedRef.current) {
         setTimeout(() => { if (mountedRef.current) rec.start(); }, 2000);

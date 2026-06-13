@@ -26,6 +26,7 @@ type PtzDir = 'up' | 'down' | 'left' | 'right' | 'zoom_in' | 'zoom_out';
 const MODE_KEY       = 'sentra_mode';
 const REMOTE_URL_KEY = 'sentra_camera_url';   // shared with Settings panel
 const RETRY_MS       = 5000;
+const DEFAULT_REMOTE = '';
 
 // ── PTZ hook — completely isolated from the video stream ───────────────────
 

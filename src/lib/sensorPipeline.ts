@@ -149,7 +149,7 @@ class SensorPipeline {
     return Math.max(0, Math.min(1, (correlation + 1) / 2));
   }
 
-  private persistAlert(reading: SensorReading, alerts: string[]) {
+  private persistAlert(_reading: SensorReading, alerts: string[]) {
     (async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();

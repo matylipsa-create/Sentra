@@ -8,18 +8,13 @@ import {
   Eye,
   Zap,
   Wifi,
-  WifiOff,
   AlertTriangle,
-  CheckCircle,
   MoreVertical,
-  Grid3x3,
-  Maximize2,
   RefreshCw,
   Mic,
-  Phone,
 } from 'lucide-react';
 import { GestureRecognizer, type Gesture } from '../lib/gestures';
-import { bluetoothManager, type BluetoothDevice, type BiometricData } from '../lib/bluetooth';
+import { bluetoothManager, type BluetoothDevice } from '../lib/bluetooth';
 import { useApp } from '../context/AppContext';
 import { useTacticalDashboard } from '../hooks/useTacticalDashboard';
 
@@ -108,7 +103,7 @@ const getStatusFromValue = (value: number, min: number, max: number, critical: n
 
 export default function TacticalDashboard() {
   const { state, setMode } = useApp();
-  const { biometrics, metrics, stressAlert, coherence } = useTacticalDashboard();
+  const { biometrics, metrics, stressAlert } = useTacticalDashboard();
   const mainRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<GestureRecognizer | null>(null);
 

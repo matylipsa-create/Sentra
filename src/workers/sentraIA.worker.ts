@@ -1,11 +1,6 @@
 // SentraIA Web Worker — SpeechRecognition (es-AR) + coercion filter
 // Runs entirely off the main thread via SharedWorker pattern.
 
-type SpeechWorkerMsg =
-  | { type: 'START_LISTEN' }
-  | { type: 'STOP_LISTEN' }
-  | { type: 'SET_ARMED'; armed: boolean };
-
 // Coercion / distress keyword bank (Spanish — Argentine dialect)
 const COERCION_KEYWORDS = [
   'ayuda', 'auxilio', 'socorro', 'peligro', 'amenaza',

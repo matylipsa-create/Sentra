@@ -8,7 +8,8 @@ interface Props {
 export default function SentraIAPanel({ onCoercion }: Props) {
   const [listening, setListening] = useState(false);
   const [lastTranscript, setLastTranscript] = useState('');
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const workerRef = useRef<Worker | null>(null);
 
   const initWorker = useCallback(() => {
@@ -36,7 +37,7 @@ export default function SentraIAPanel({ onCoercion }: Props) {
     rec.interimResults = false;
     rec.maxAlternatives = 1;
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
+    rec.onresult = (e: any) => {
       const transcript = e.results[e.results.length - 1][0].transcript;
       setLastTranscript(transcript);
       workerRef.current?.postMessage({ type: 'ANALYZE_TRANSCRIPT', transcript });

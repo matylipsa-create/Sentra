@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { mesh } from '../lib/SentraMesh';
@@ -36,7 +36,7 @@ const cycle = [
 ].map(([x, y]) => `${(x * QRS_W).toFixed(1)},${y.toFixed(1)}`).join(' ');
 
 // Two cycles placed side-by-side
-const points2 = `${cycle} ${cycle.replace(/(\d+\.?\d*),/g, (m, n) => `${parseFloat(n) + QRS_W},`)}`;
+const points2 = `${cycle} ${cycle.replace(/(\d+\.?\d*),/g, (_m, n) => `${parseFloat(n) + QRS_W},`)}`;
 
 function EcgTrace({ color, active }: { color: string; active: boolean }) {
   return (

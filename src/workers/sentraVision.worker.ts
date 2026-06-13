@@ -90,7 +90,7 @@ async function detectObjects(imageBitmap: ImageBitmap): Promise<void> {
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const tensor = tf.browser.fromPixels({
-      data: imageData.data,
+      data: new Uint8Array(imageData.data.buffer),
       width: canvas.width,
       height: canvas.height,
     });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Shield, AlertTriangle, CheckCircle, Clock, RefreshCw, Zap, WifiOff, Loader } from 'lucide-react';
+import { Shield, CheckCircle, Clock, RefreshCw, Zap, WifiOff, Loader } from 'lucide-react';
 import type { SecurityLog, Severity } from '../types';
 import { pipedreamOrchestrator } from '../lib/pipedream';
 

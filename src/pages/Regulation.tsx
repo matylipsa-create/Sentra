@@ -166,7 +166,8 @@ export default function Regulation() {
   const [pipedreamStatus, setPipedreamStatus] = useState<'ok' | 'fallback' | 'unknown'>('unknown');
   const [sessionId] = useState(() => crypto.randomUUID());
   const bottomRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -238,11 +239,10 @@ export default function Regulation() {
   );
 
   const toggleListening = useCallback(() => {
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition;
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    if (!SpeechRecognition) return;
+    if (!SpeechRec) return;
 
     if (listening) {
       recognitionRef.current?.stop();
@@ -250,13 +250,14 @@ export default function Regulation() {
       return;
     }
 
-    const recognition = new SpeechRecognition();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition: any = new SpeechRec();
     recognition.lang = 'es-MX';
     recognition.continuous = false;
     recognition.interimResults = false;
     recognitionRef.current = recognition;
 
-    recognition.onresult = (e) => {
+    recognition.onresult = (e: any) => {
       const transcript = e.results[0][0].transcript;
       setInput(transcript);
     };

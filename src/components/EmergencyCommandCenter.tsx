@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Crosshair, Zap, MapPin, Video, Activity, Lock, Unlock, Clock, Send } from 'lucide-react';
+import { Crosshair, Zap, MapPin, Video, Activity, Lock, Unlock } from 'lucide-react';
 import { biometricMonitor, type BiometricSnapshot } from '../lib/biometricMonitor';
 import { hardwareIntegration, type LocationData } from '../lib/hardwareIntegration';
 import { pipedreamOrchestrator, type EmergencyPayload } from '../lib/pipedream';

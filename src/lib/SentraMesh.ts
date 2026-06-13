@@ -205,6 +205,16 @@ class SentraMesh {
     const unsent = await this.db.getAllFromIndex(STORE, 'sent', IDBKeyRange.only(false));
     return unsent.length;
   }
+
+  async getAllEvents(): Promise<MeshEvent[]> {
+    if (!this.db) return [];
+    return this.db.getAll(STORE);
+  }
+
+  async clearAllEvents(): Promise<void> {
+    if (!this.db) return;
+    await this.db.clear(STORE);
+  }
 }
 
 export const mesh = SentraMesh.getInstance();

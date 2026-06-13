@@ -22,7 +22,8 @@ class BluetoothManager {
   private devices: Map<string, BluetoothDevice> = new Map();
   private listeners: ((data: BiometricData) => void)[] = [];
   private isSupported = false;
-  private server: BluetoothRemoteGATTServer | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private server: any = null;
 
   constructor() {
     this.isSupported = 'bluetooth' in navigator;
