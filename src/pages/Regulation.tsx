@@ -1,29 +1,30 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Volume2, VolumeX, Mic, MicOff, Cpu, Anchor, Eye, Loader, WifiOff } from 'lucide-react';
+import { Send, Volume2, VolumeX, Mic, MicOff, Cpu, Anchor, Eye, Loader, WifiOff, Activity } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSpeech } from '../hooks/useSpeech';
+import { useTacticalDashboard } from '../hooks/useTacticalDashboard';
 import type { ChatMessage, AgentName } from '../types';
 
 const REGULATION_ENDPOINT = 'https://eohmxy72d8jcync.m.pipedream.net';
 
 const AGENT_COLORS: Record<AgentName, string> = {
-  Anchor: '#10b981',
-  Daemon: '#1a73e8',
+  Anchor:   '#10b981',
+  Daemon:   '#1a73e8',
   Observer: '#6366f1',
 };
 
 const AGENT_ICONS: Record<AgentName, React.ElementType> = {
-  Anchor: Anchor,
-  Daemon: Cpu,
+  Anchor:   Anchor,
+  Daemon:   Cpu,
   Observer: Eye,
 };
 
 // Local fallback pool — used only when Pipedream is unreachable
 const FALLBACK_POOL: { agent: AgentName; text: string }[] = [
-  { agent: 'Daemon', text: 'Te escucho. Estoy aquí contigo en este momento. ¿Puedes describir lo que sientes con más detalle?' },
-  { agent: 'Anchor', text: 'Nota cómo tu respiración sostiene este momento. Estás presente. Estás a salvo. ¿Qué necesitas ahora?' },
+  { agent: 'Daemon',   text: 'Te escucho. Estoy aquí contigo en este momento. ¿Puedes describir lo que sientes con más detalle?' },
+  { agent: 'Anchor',   text: 'Nota cómo tu respiración sostiene este momento. Estás presente. Estás a salvo. ¿Qué necesitas ahora?' },
   { agent: 'Observer', text: 'Desde mi posición de observación, percibo que estás procesando algo importante. Tómate el tiempo que necesites.' },
-  { agent: 'Daemon', text: 'Detecto señales de tensión. Iniciando protocolo de estabilización: inhala 4s — sostén 4s — exhala 6s.' },
+  { agent: 'Daemon',   text: 'Detecto señales de tensión. Iniciando protocolo de estabilización: inhala 4s — sostén 4s — exhala 6s.' },
 ];
 
 async function queryPipedream(
@@ -33,38 +34,43 @@ async function queryPipedream(
 ): Promise<{ agent: AgentName; text: string } | null> {
   try {
     const res = await fetch(REGULATION_ENDPOINT, {
-      method: 'POST',
+      method:  'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type':    'application/json',
         'X-SENTRA-Version': '3.0',
-        'X-Flow': 'regulation',
+        'X-Flow':          'regulation',
       },
       body: JSON.stringify({
         event_type: 'REGULATION_QUERY',
         session_id: sessionId,
         mode,
-        message: userMessage,
+        message:   userMessage,
         timestamp: Date.now(),
       }),
       signal: AbortSignal.timeout(8000),
     });
-
-    if (!res.ok) {
-      console.error('[SENTRA] Pipedream regulation endpoint responded with', res.status);
-      return null;
-    }
-
+    if (!res.ok) return null;
     const json = await res.json();
-    // Accept either { agent, text } or { response } or { message }
-    const text: string = json?.text ?? json?.response ?? json?.message ?? '';
+    const text: string    = json?.text ?? json?.response ?? json?.message ?? '';
     const agent: AgentName = (json?.agent as AgentName) ?? 'Daemon';
-    if (text) return { agent, text };
-    return null;
-  } catch (err) {
-    console.error('[SENTRA] Pipedream regulation unreachable:', err);
+    return text ? { agent, text } : null;
+  } catch {
     return null;
   }
 }
+
+// ── Autonomous agent message builders ─────────────────────────────────────
+
+function buildDaemonCriticalMsg(stressLevel: number): string {
+  const rounded = Math.round(stressLevel);
+  return `Core Evolis detecta fluctuación cognitiva. Nivel de estrés: ${rounded}% (CRÍTICO). Solicitud de confirmación háptica enviada. Iniciando protocolo de estabilización neurológica — inhala 4s · sostén 4s · exhala 6s.`;
+}
+
+function buildAnchorRegulationMsg(): string {
+  return `Protocolo de Regulación cognitiva activo. Esperando confirmación de operador. ¿Cómo estás en este momento? (Opción pregrabada 2: "Alerta Activada") — Escaneo situacional en curso. Estás seguro. Respira conmigo.`;
+}
+
+// ── Message bubble ─────────────────────────────────────────────────────────
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user';
@@ -82,9 +88,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     );
   }
 
-  const agentName = msg.agent ?? 'Daemon';
-  const color = AGENT_COLORS[agentName as AgentName] ?? '#1a73e8';
-  const Icon = AGENT_ICONS[agentName as AgentName] ?? Cpu;
+  const agentName = (msg.agent ?? 'Daemon') as AgentName;
+  const color     = AGENT_COLORS[agentName] ?? '#1a73e8';
+  const Icon      = AGENT_ICONS[agentName]  ?? Cpu;
+  const isAutonomous = (msg as any).autonomous === true;
 
   return (
     <div className="flex gap-3 items-start">
@@ -97,6 +104,14 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1">
           <p className="text-xs font-semibold" style={{ color }}>{agentName}</p>
+          {isAutonomous && (
+            <span
+              className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full"
+              style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}
+            >
+              <Activity size={8} />auto
+            </span>
+          )}
           {msg.fallback && (
             <span className="flex items-center gap-1 text-xs text-gray-600">
               <WifiOff size={9} /> local
@@ -105,7 +120,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         </div>
         <div
           className="px-4 py-3 rounded-2xl rounded-tl-sm"
-          style={{ background: `${color}10`, border: `1px solid ${color}20` }}
+          style={{
+            background: isAutonomous ? `${color}14` : `${color}10`,
+            border:     `1px solid ${isAutonomous ? `${color}35` : `${color}20`}`,
+          }}
         >
           <p className="text-sm text-gray-200 leading-relaxed">{msg.content}</p>
         </div>
@@ -120,7 +138,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
 function TypingIndicator({ agent }: { agent: AgentName }) {
   const color = AGENT_COLORS[agent];
-  const Icon = AGENT_ICONS[agent];
+  const Icon  = AGENT_ICONS[agent];
   return (
     <div className="flex gap-3 items-center">
       <div
@@ -134,20 +152,48 @@ function TypingIndicator({ agent }: { agent: AgentName }) {
         style={{ background: `${color}10`, border: `1px solid ${color}20` }}
       >
         {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="w-1.5 h-1.5 rounded-full animate-bounce"
-            style={{ background: color, animationDelay: `${i * 150}ms` }}
-          />
+          <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce"
+            style={{ background: color, animationDelay: `${i * 150}ms` }} />
         ))}
       </div>
     </div>
   );
 }
 
+// ── Stress gauge bar ───────────────────────────────────────────────────────
+
+function StressGauge({ level, alert }: { level: number; alert: boolean }) {
+  const pct = Math.min(100, Math.max(0, level));
+  const color = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f97316' : pct >= 50 ? '#eab308' : '#10b981';
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
+      style={{ background: `${color}08`, borderColor: `${color}30` }}>
+      <Activity size={12} style={{ color, flexShrink: 0 }} />
+      <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, background: color, boxShadow: alert ? `0 0 8px ${color}` : 'none' }}
+        />
+      </div>
+      <span className="text-xs font-bold tabular-nums flex-shrink-0" style={{ color, minWidth: '2.5rem' }}>
+        {pct.toFixed(0)}%
+      </span>
+      {alert && (
+        <span className="text-xs font-bold tracking-widest animate-pulse" style={{ color: '#ef4444' }}>
+          CRÍTICO
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
+
 export default function Regulation() {
   const { state } = useApp();
   const { speak, stop, isSpeaking } = useSpeech();
+  const { metrics, stressAlert } = useTacticalDashboard();
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '0',
@@ -158,29 +204,95 @@ export default function Regulation() {
       voiceSpoken: false,
     },
   ]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingAgent, setTypingAgent] = useState<AgentName>('Daemon');
-  const [voiceActive, setVoiceActive] = useState(state.biometricProfile.voiceEnabled);
-  const [listening, setListening] = useState(false);
+  const [input,          setInput]          = useState('');
+  const [isTyping,       setIsTyping]        = useState(false);
+  const [typingAgent,    setTypingAgent]     = useState<AgentName>('Daemon');
+  const [voiceActive,    setVoiceActive]     = useState(state.biometricProfile.voiceEnabled);
+  const [listening,      setListening]       = useState(false);
   const [pipedreamStatus, setPipedreamStatus] = useState<'ok' | 'fallback' | 'unknown'>('unknown');
-  const [sessionId] = useState(() => crypto.randomUUID());
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [sessionId]     = useState(() => crypto.randomUUID());
+  const bottomRef        = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef   = useRef<any>(null);
+
+  // Guard refs so autonomous messages fire exactly once per threshold crossing
+  const daemonAlertFiredRef  = useRef(false);
+  const anchorAlertFiredRef  = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  // ── Autonomous Daemon message — fires once when stress >= 90% ─────────────
+  useEffect(() => {
+    const stress = metrics.stressLevel;
+
+    if (stress >= 90 && !daemonAlertFiredRef.current) {
+      daemonAlertFiredRef.current = true;
+
+      const msg: ChatMessage & { autonomous: boolean } = {
+        id:          crypto.randomUUID(),
+        role:        'assistant',
+        content:     buildDaemonCriticalMsg(stress),
+        agent:       'Daemon',
+        createdAt:   new Date(),
+        voiceSpoken: voiceActive,
+        autonomous:  true,
+      };
+      setMessages((prev) => [...prev, msg]);
+
+      if (voiceActive) {
+        speak(msg.content, {
+          rate:   state.biometricProfile.voiceRate,
+          pitch:  state.biometricProfile.voicePitch,
+          volume: state.biometricProfile.voiceVolume,
+          lang:   state.biometricProfile.preferredVoice,
+        });
+      }
+    }
+
+    // Reset guard when stress drops below 75 so next spike can trigger again
+    if (stress < 75) daemonAlertFiredRef.current = false;
+  }, [metrics.stressLevel, voiceActive, speak, state.biometricProfile]);
+
+  // ── Autonomous Anchor message — fires once when mode shifts to STABILIZE ──
+  useEffect(() => {
+    if (state.daemonMode === 'STABILIZE' && !anchorAlertFiredRef.current) {
+      anchorAlertFiredRef.current = true;
+
+      const msg: ChatMessage & { autonomous: boolean } = {
+        id:          crypto.randomUUID(),
+        role:        'assistant',
+        content:     buildAnchorRegulationMsg(),
+        agent:       'Anchor',
+        createdAt:   new Date(),
+        voiceSpoken: voiceActive,
+        autonomous:  true,
+      };
+      setMessages((prev) => [...prev, msg]);
+
+      if (voiceActive) {
+        speak(msg.content, {
+          rate:   state.biometricProfile.voiceRate,
+          pitch:  state.biometricProfile.voicePitch,
+          volume: state.biometricProfile.voiceVolume,
+          lang:   state.biometricProfile.preferredVoice,
+        });
+      }
+    }
+
+    if (state.daemonMode !== 'STABILIZE') anchorAlertFiredRef.current = false;
+  }, [state.daemonMode, voiceActive, speak, state.biometricProfile]);
+
+  // ── User-initiated chat ───────────────────────────────────────────────────
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isTyping) return;
 
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: text.trim(),
+        id:        crypto.randomUUID(),
+        role:      'user',
+        content:   text.trim(),
         createdAt: new Date(),
       };
 
@@ -189,11 +301,9 @@ export default function Regulation() {
       setTypingAgent('Daemon');
       setIsTyping(true);
 
-      // Small delay so typing indicator renders before the async call
       await new Promise((r) => setTimeout(r, 400));
 
       const pipedreamResponse = await queryPipedream(text.trim(), sessionId, state.daemonMode);
-
       let response: { agent: AgentName; text: string };
       let isFallback = false;
 
@@ -201,37 +311,32 @@ export default function Regulation() {
         response = pipedreamResponse;
         setPipedreamStatus('ok');
       } else {
-        // Graceful degradation to local pool
-        const pick = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
-        response = pick;
+        response   = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
         isFallback = true;
         setPipedreamStatus('fallback');
       }
 
       setTypingAgent(response.agent);
-
-      // Brief pause after setting the right agent on the indicator
       await new Promise((r) => setTimeout(r, 300));
       setIsTyping(false);
 
       const assistantMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response.text,
-        agent: response.agent,
-        createdAt: new Date(),
+        id:          crypto.randomUUID(),
+        role:        'assistant',
+        content:     response.text,
+        agent:       response.agent,
+        createdAt:   new Date(),
         voiceSpoken: voiceActive,
-        fallback: isFallback,
+        fallback:    isFallback,
       };
-
       setMessages((prev) => [...prev, assistantMsg]);
 
       if (voiceActive) {
         speak(response.text, {
-          rate: state.biometricProfile.voiceRate,
-          pitch: state.biometricProfile.voicePitch,
+          rate:   state.biometricProfile.voiceRate,
+          pitch:  state.biometricProfile.voicePitch,
           volume: state.biometricProfile.voiceVolume,
-          lang: state.biometricProfile.preferredVoice,
+          lang:   state.biometricProfile.preferredVoice,
         });
       }
     },
@@ -239,29 +344,21 @@ export default function Regulation() {
   );
 
   const toggleListening = useCallback(() => {
-    const SpeechRec =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) return;
-
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
       return;
     }
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognition: any = new SpeechRec();
-    recognition.lang = 'es-MX';
-    recognition.continuous = false;
+    recognition.lang           = 'es-MX';
+    recognition.continuous     = false;
     recognition.interimResults = false;
-    recognitionRef.current = recognition;
-
-    recognition.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      setInput(transcript);
-    };
-    recognition.onend = () => setListening(false);
+    recognitionRef.current     = recognition;
+    recognition.onresult = (e: any) => { setInput(e.results[0][0].transcript); };
+    recognition.onend    = () => setListening(false);
     recognition.start();
     setListening(true);
   }, [listening]);
@@ -271,10 +368,18 @@ export default function Regulation() {
     setVoiceActive((v) => !v);
   }, [isSpeaking, stop]);
 
+  const stressLevel = metrics.stressLevel;
+  const modeColor: Record<string, string> = {
+    ASSIST:    '#1a73e8',
+    STABILIZE: '#ef4444',
+    OBSERVE:   '#10b981',
+  };
+  const currentModeColor = modeColor[state.daemonMode] ?? '#1a73e8';
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-white/10">
+      <div className="flex items-center justify-between pb-3 border-b border-white/10">
         <div>
           <p className="text-xs text-gray-500 uppercase tracking-widest">SENTRA</p>
           <h2 className="text-lg font-bold text-white">Regulación Cognitiva</h2>
@@ -290,24 +395,44 @@ export default function Regulation() {
           >
             {voiceActive ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all ${
-            pipedreamStatus === 'fallback'
-              ? 'bg-orange-500/10 border-orange-500/30'
-              : 'bg-emerald-500/10 border-emerald-500/30'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${pipedreamStatus === 'fallback' ? 'bg-orange-400' : 'bg-emerald-400'}`} />
-            <span className={`text-xs font-medium ${pipedreamStatus === 'fallback' ? 'text-orange-400' : 'text-emerald-400'}`}>
-              {pipedreamStatus === 'fallback' ? 'Local' : 'IA Activa'}
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all"
+            style={{
+              background:   `${currentModeColor}10`,
+              borderColor:  `${currentModeColor}30`,
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ background: currentModeColor }}
+            />
+            <span className="text-xs font-medium" style={{ color: currentModeColor }}>
+              {state.daemonMode}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Protocol badge */}
-      <div className="py-3 flex justify-center">
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5">
-          <Cpu size={12} className="text-blue-400" />
-          <span className="text-xs text-gray-400">Workflow IA · Pipedream — {state.daemonMode}</span>
+      {/* Stress gauge — live telemetry bar */}
+      <div className="py-2">
+        <StressGauge level={stressLevel} alert={stressAlert} />
+      </div>
+
+      {/* Pipedream status */}
+      <div className="pb-2 flex justify-center">
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${
+          pipedreamStatus === 'fallback'
+            ? 'bg-orange-500/10 border-orange-500/30'
+            : 'bg-emerald-500/10 border-emerald-500/30'
+        }`}>
+          <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+            pipedreamStatus === 'fallback' ? 'bg-orange-400' : 'bg-emerald-400'
+          }`} />
+          <span className={`text-xs font-medium ${
+            pipedreamStatus === 'fallback' ? 'text-orange-400' : 'text-emerald-400'
+          }`}>
+            {pipedreamStatus === 'fallback' ? 'Modo local' : 'IA Activa · Pipedream'}
+          </span>
         </div>
       </div>
 
@@ -356,7 +481,9 @@ export default function Regulation() {
             disabled={!input.trim() || isTyping}
             className="w-11 h-11 rounded-xl flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 flex-shrink-0"
           >
-            {isTyping ? <Loader size={18} className="animate-spin text-white" /> : <Send size={18} className="text-white" />}
+            {isTyping
+              ? <Loader size={18} className="animate-spin text-white" />
+              : <Send size={18} className="text-white" />}
           </button>
         </div>
       </div>
