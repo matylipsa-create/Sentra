@@ -194,6 +194,8 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
   const startCapture = useCallback(() => {
     stopCapture();
     captureRef.current = setInterval(() => {
+      // Skip inference when the browser is backgrounded — saves GPU/battery
+      if (document.hidden) return;
       const video  = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas || !modelReady || video.readyState < 2) return;

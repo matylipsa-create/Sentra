@@ -41,36 +41,30 @@ export function useSentraCore() {
   const [rtt, setRtt] = useState(0);
 
   const geoWatchId = useRef<number | null>(null);
-  const geoWorker = useRef<Worker | null>(null);
+  const geoWorker  = useRef<Worker | null>(null);
 
-  // Hardware autodiagnosis
+  // Hardware autodiagnosis — single enumerateDevices() call covers both camera and mic
   const runDiagnostics = useCallback(async () => {
     const results: HardwareDiag = {
-      camera: false,
-      microphone: false,
-      geolocation: 'geolocation' in navigator,
-      indexeddb: 'indexedDB' in window,
+      camera:        false,
+      microphone:    false,
+      geolocation:   'geolocation' in navigator,
+      indexeddb:     'indexedDB' in window,
       serviceWorker: 'serviceWorker' in navigator,
-      webWorker: typeof Worker !== 'undefined',
-      ready: false,
+      webWorker:     typeof Worker !== 'undefined',
+      ready:         false,
     };
 
-    // Camera check
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      results.camera = devices.some((d) => d.kind === 'videoinput');
-    } catch { results.camera = false; }
-
-    // Microphone check
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
+      results.camera     = devices.some((d) => d.kind === 'videoinput');
       results.microphone = devices.some((d) => d.kind === 'audioinput');
-    } catch { results.microphone = false; }
+    } catch {
+      results.camera     = false;
+      results.microphone = false;
+    }
 
-    results.ready =
-      results.geolocation &&
-      results.indexeddb &&
-      results.webWorker;
+    results.ready = results.geolocation && results.indexeddb && results.webWorker;
 
     setDiag(results);
     await mesh.emit('HARDWARE_DIAG', results);
@@ -81,7 +75,6 @@ export function useSentraCore() {
   const startGeo = useCallback(() => {
     if (!navigator.geolocation) return;
 
-    // Launch geo worker for Nominatim lookups
     geoWorker.current = new Worker(
       new URL('../workers/sentraGeo.worker.ts', import.meta.url),
       { type: 'module' }
@@ -97,10 +90,7 @@ export function useSentraCore() {
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         setGeo((prev) => ({ ...prev, latitude, longitude, accuracy }));
-
-        // Offload reverse geocoding to worker
         geoWorker.current?.postMessage({ type: 'REVERSE_GEOCODE', lat: latitude, lon: longitude });
-
         mesh.emit('GEO_UPDATE', { latitude, longitude, accuracy, timestamp: Date.now() });
       },
       (err) => console.warn('Geo error:', err),
@@ -117,7 +107,6 @@ export function useSentraCore() {
     geoWorker.current = null;
   }, []);
 
-  // Arm / Disarm
   const arm = useCallback(async () => {
     setArmedState(true);
     setGeo((prev) => ({ ...prev, armed: true }));
@@ -133,26 +122,28 @@ export function useSentraCore() {
     await mesh.emit('SYSTEM_DISARMED', { timestamp: Date.now() });
   }, [stopGeo]);
 
-  // Haptic vibration (coercion protocol)
   const triggerHaptic = useCallback((pattern: number[]) => {
     if ('vibrate' in navigator) navigator.vibrate(pattern);
   }, []);
 
-  // Initialize mesh and run diagnostics on mount
+  // One-time initialization — mesh + diagnostics. Runs once on mount.
   useEffect(() => {
     mesh.init().then(() => runDiagnostics());
+    return () => stopGeo();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // RTT polling
-    const rttInterval = setInterval(() => {
+  // Adaptive RTT heartbeat:
+  //   Armed   → poll every 3 s (tactical frequency)
+  //   Standby → poll every 15 s (passive / battery-friendly)
+  useEffect(() => {
+    const ms = armed ? 3_000 : 15_000;
+    const id = setInterval(() => {
       setRtt(mesh.getRTT());
       mesh.getPendingCount().then(setPendingMessages);
-    }, 3000);
-
-    return () => {
-      clearInterval(rttInterval);
-      stopGeo();
-    };
-  }, [runDiagnostics, stopGeo]);
+    }, ms);
+    return () => clearInterval(id);
+  }, [armed]);
 
   return {
     geo,

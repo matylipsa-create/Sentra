@@ -42,21 +42,26 @@ export function useTacticalDashboard(): DashboardState {
       setBiometrics(data);
       sensorPipeline.addReading('primary-sensor', data);
     });
-
     return unsubscribe;
   }, []);
 
-  // Subscribe to aggregated metrics
+  // Subscribe to aggregated metrics — throttle mode/status side-effects
+  // to avoid duplicate AppContext writes when two hook instances are mounted
+  // simultaneously (CSS-freeze layout keeps both Dashboard and Regulation alive).
   useEffect(() => {
+    let lastStressWrite = 0;
+
     const unsubscribe = sensorPipeline.subscribe((agg) => {
       setMetrics(agg);
 
-      // Automatic mode switching based on stress levels
+      const now = Date.now();
+      // Rate-limit the AppContext side-effects to once per 2 s
+      if (now - lastStressWrite < 2000) return;
+      lastStressWrite = now;
+
       if (agg.stressLevel > state.biometricProfile.stressThreshold) {
         setStressAlert(true);
-        if (state.daemonMode !== 'STABILIZE') {
-          setMode('STABILIZE');
-        }
+        if (state.daemonMode !== 'STABILIZE') setMode('STABILIZE');
         setStatus('alert');
       } else if (agg.stressLevel < state.biometricProfile.calmThreshold && stressAlert) {
         setStressAlert(false);
