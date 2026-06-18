@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Activity, Volume2, Cpu, Shield, Info, Sliders, Video, CheckCircle, Download, Trash2, RotateCcw } from 'lucide-react';
+import { Activity, Volume2, Cpu, Shield, Info, Sliders, Video, CheckCircle, Download, Trash2, RotateCcw, Radio, Send } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { mesh } from '../lib/SentraMesh';
 import type { AgentName } from '../types';
 
-const CAMERA_URL_KEY = 'sentra_camera_url';
+const CAMERA_URL_KEY  = 'sentra_camera_url';
+const TELEGRAM_ID_KEY = 'sentra_telegram_chat_id';
+const PIPEDREAM_KEY   = 'sentra_pipedream_url';
 
 const DEFAULT_BIOMETRIC_RESET = {
   voiceEnabled: true,
@@ -114,9 +116,13 @@ const AGENT_COLORS: Record<AgentName, string> = {
 export default function Settings() {
   const { state, updateBiometric, updateAgent } = useApp();
   const { biometricProfile } = state;
-  const [cameraUrl, setCameraUrl] = useState(() => localStorage.getItem(CAMERA_URL_KEY) || '');
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [actionFlash, setActionFlash] = useState<'export' | 'clear' | 'reset' | null>(null);
+  const [cameraUrl,     setCameraUrl]     = useState(() => localStorage.getItem(CAMERA_URL_KEY) || '');
+  const [telegramId,    setTelegramId]    = useState(() => localStorage.getItem(TELEGRAM_ID_KEY) || '');
+  const [pipedreamUrl,  setPipedreamUrl]  = useState(() => localStorage.getItem(PIPEDREAM_KEY) || '');
+  const [savedFlash,    setSavedFlash]    = useState(false);
+  const [chanFlash,     setChanFlash]     = useState(false);
+  const [actionFlash,   setActionFlash]   = useState<'export' | 'clear' | 'reset' | null>(null);
+  const [testFlash,     setTestFlash]     = useState(false);
 
   const saveCameraUrl = () => {
     const trimmed = cameraUrl.trim();
@@ -124,6 +130,28 @@ export default function Settings() {
     window.dispatchEvent(new StorageEvent('storage', { key: CAMERA_URL_KEY, newValue: trimmed }));
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 2000);
+  };
+
+  const savePerimeterChannel = () => {
+    localStorage.setItem(TELEGRAM_ID_KEY, telegramId.trim());
+    localStorage.setItem(PIPEDREAM_KEY,   pipedreamUrl.trim());
+    // Notify SentraMesh immediately so next emit picks up the new config
+    window.dispatchEvent(new CustomEvent('sentra_config_updated', {
+      detail: { telegramChatId: telegramId.trim(), pipedreamUrl: pipedreamUrl.trim() },
+    }));
+    setChanFlash(true);
+    setTimeout(() => setChanFlash(false), 2500);
+  };
+
+  const testPerimeterChannel = async () => {
+    setTestFlash(true);
+    await mesh.emit('HARDWARE_DIAG', {
+      test: true,
+      message: '🧪 SENTRA TEST — Canal Perimetral verificado.',
+      chatId: telegramId.trim() || 'default',
+      ts: Date.now(),
+    });
+    setTimeout(() => setTestFlash(false), 2500);
   };
 
   const handleExportLogs = async () => {
@@ -337,6 +365,104 @@ export default function Settings() {
               Sin URL configurada — VisionPanel en espera
             </p>
           )}
+        </div>
+      </Section>
+
+      {/* Perimeter Channel — Telegram + Pipedream */}
+      <Section title="Canal Perimetral" icon={Radio}>
+        <div className="py-3 flex flex-col gap-4">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Configura el destino de las alertas tácticas. Las notificaciones de Código Rojo y eventos de coacción serán retransmitidas a este canal en tiempo real.
+          </p>
+
+          {/* Telegram Chat ID */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Telegram Chat ID
+            </label>
+            <p className="text-xs text-gray-600">
+              ID numérico del canal o grupo (ej. <span className="font-mono text-gray-500">-1001234567890</span>)
+            </p>
+            <input
+              type="text"
+              value={telegramId}
+              onChange={(e) => setTelegramId(e.target.value)}
+              placeholder="-1001234567890"
+              className="w-full px-3 py-2.5 rounded-lg text-sm font-mono outline-none transition-all"
+              style={{
+                background: 'rgba(0,191,255,0.04)',
+                border: `1px solid ${telegramId ? 'rgba(0,191,255,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                color: '#e5e7eb',
+                caretColor: '#00BFFF',
+              }}
+              onFocus={(e) => (e.target.style.borderColor = 'rgba(0,191,255,0.55)')}
+              onBlur={(e) => (e.target.style.borderColor = telegramId ? 'rgba(0,191,255,0.3)' : 'rgba(255,255,255,0.08)')}
+            />
+          </div>
+
+          {/* Pipedream URL */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              URL Webhook Pipedream
+            </label>
+            <p className="text-xs text-gray-600">
+              Endpoint de orquestación SENTRA Cerebro
+            </p>
+            <input
+              type="url"
+              value={pipedreamUrl}
+              onChange={(e) => setPipedreamUrl(e.target.value)}
+              placeholder="https://eoXXX.m.pipedream.net"
+              className="w-full px-3 py-2.5 rounded-lg text-sm font-mono outline-none transition-all"
+              style={{
+                background: 'rgba(0,191,255,0.04)',
+                border: `1px solid ${pipedreamUrl ? 'rgba(0,191,255,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                color: '#e5e7eb',
+                caretColor: '#00BFFF',
+              }}
+              onFocus={(e) => (e.target.style.borderColor = 'rgba(0,191,255,0.55)')}
+              onBlur={(e) => (e.target.style.borderColor = pipedreamUrl ? 'rgba(0,191,255,0.3)' : 'rgba(255,255,255,0.08)')}
+            />
+          </div>
+
+          {/* Live status */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${telegramId && pipedreamUrl ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
+            <span className="text-xs font-mono" style={{ color: telegramId && pipedreamUrl ? '#6ee7b7' : '#4b5563' }}>
+              {telegramId && pipedreamUrl
+                ? `Canal activo · ${telegramId.slice(0, 14)}…`
+                : 'Sin configurar — usando canal por defecto'}
+            </span>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={savePerimeterChannel}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: chanFlash ? 'rgba(0,191,255,0.18)' : 'rgba(0,191,255,0.08)',
+                border: `1px solid ${chanFlash ? 'rgba(0,191,255,0.6)' : 'rgba(0,191,255,0.25)'}`,
+                color: chanFlash ? '#00BFFF' : '#67e8f9',
+              }}
+            >
+              {chanFlash ? <><CheckCircle size={14} /> Guardado</> : 'Guardar Canal'}
+            </button>
+            <button
+              onClick={testPerimeterChannel}
+              disabled={!telegramId || !pipedreamUrl}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{
+                background: testFlash ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.08)',
+                border: `1px solid ${testFlash ? 'rgba(16,185,129,0.6)' : 'rgba(16,185,129,0.25)'}`,
+                color: testFlash ? '#10b981' : '#6ee7b7',
+              }}
+            >
+              {testFlash ? <CheckCircle size={14} /> : <Send size={14} />}
+              <span>{testFlash ? 'Enviado' : 'Test'}</span>
+            </button>
+          </div>
         </div>
       </Section>
 

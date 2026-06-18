@@ -8,6 +8,7 @@ import {
 import { useSentraCore } from '../hooks/useSentraCore';
 import { useTacticalDashboard } from '../hooks/useTacticalDashboard';
 import { useDemoMode } from '../hooks/useDemoMode';
+import { useApp } from '../context/AppContext';
 import { mesh } from '../lib/SentraMesh';
 import AudioEngine from './AudioEngine';
 import type { AudioAlertLog } from './AudioEngine';
@@ -33,7 +34,6 @@ interface Detection {
   eventId:    number;
 }
 
-// ── Colour map ───────────────────────────────────────────────────────────────
 const PHASE_COLOR: Record<Phase, string> = {
   BOOT:     '#00FF00',
   STANDBY:  '#00FF00',
@@ -116,7 +116,6 @@ function RadarRings({ armed, phase }: { armed: boolean; phase: Phase }) {
   );
 }
 
-// ── Diag row ─────────────────────────────────────────────────────────────────
 function DiagRow({ label, ok }: { label: string; ok: boolean }) {
   return (
     <div className="flex items-center justify-between py-0.5">
@@ -128,7 +127,6 @@ function DiagRow({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-// ── Camera modal ──────────────────────────────────────────────────────────────
 function CameraModal({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-6">
@@ -225,62 +223,56 @@ function SystemHealth({
   );
 }
 
-// ── Evidence Card overlay ─────────────────────────────────────────────────────
+// ── Evidence Card (full-width strip below vision) ─────────────────────────────
 function EvidenceCard({ detection, address }: { detection: Detection; address: string }) {
   const conf      = Math.round(detection.confidence * 100);
   const confColor = conf >= 90 ? '#ef4444' : conf >= 75 ? '#f97316' : '#eab308';
 
   return (
-    <div className="absolute bottom-2 right-2 z-10 rounded-xl overflow-hidden"
-      style={{
-        width: '164px',
-        background: 'rgba(4,8,20,0.94)',
-        border: `1px solid ${confColor}50`,
-        backdropFilter: 'blur(10px)',
-        boxShadow: `0 4px 20px rgba(0,0,0,0.5), 0 0 12px ${confColor}15`,
-      }}>
-      <div className="px-2.5 py-1.5 flex items-center justify-between"
-        style={{ background: `${confColor}18`, borderBottom: `1px solid ${confColor}30` }}>
+    <div className="border-t flex-shrink-0" style={{ borderColor: `${confColor}30`, background: 'rgba(4,8,20,0.98)' }}>
+      <div className="flex items-center justify-between px-3 py-1"
+        style={{ background: `${confColor}12`, borderBottom: `1px solid ${confColor}25` }}>
         <span style={{ color: confColor, fontSize: '8px', fontWeight: 700, letterSpacing: '0.18em', fontFamily: 'monospace' }}>
-          EVIDENCIA
+          CENTRO DE EVIDENCIA
         </span>
-        <span style={{ color: `${confColor}80`, fontSize: '8px', fontFamily: 'monospace' }}>
-          EVT-{String(detection.eventId).padStart(5, '0')}
-        </span>
-      </div>
-      <div className="px-2.5 py-2 space-y-1.5">
-        <div className="flex justify-between items-center">
-          <span style={{ color: '#ffffff40', fontSize: '8px', fontFamily: 'monospace' }}>OBJETIVO</span>
-          <span style={{ color: '#ffffff', fontSize: '9px', fontWeight: 700 }}>
-            {detection.label.toUpperCase()}
-          </span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span style={{ color: '#ffffff40', fontSize: '8px', fontFamily: 'monospace' }}>CONFIANZA</span>
-          <span className="px-2 py-0.5 rounded-md font-bold" style={{
-            background: `${confColor}20`, border: `1px solid ${confColor}50`,
-            color: confColor, fontSize: '11px', fontFamily: 'monospace',
-          }}>
-            {conf}%
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span style={{ color: '#ffffff40', fontSize: '8px', fontFamily: 'monospace' }}>UBICACIÓN</span>
-          <span className="truncate" style={{ color: '#00BFFF', fontSize: '8px', fontFamily: 'monospace' }}>
-            {address || 'Resolviendo...'}
-          </span>
-        </div>
-        <div className="flex items-center justify-between pt-1"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <span style={{ color: '#ffffff25', fontSize: '7px', fontFamily: 'monospace' }}>
-            {detection.timestamp.toLocaleTimeString('es-AR', {
-              hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-            })}
-          </span>
+        <div className="flex items-center gap-2">
           <span className="animate-pulse" style={{ color: '#ef4444', fontSize: '7px', fontWeight: 700, fontFamily: 'monospace' }}>
             ● ACTIVO
           </span>
+          <span style={{ color: `${confColor}70`, fontSize: '8px', fontFamily: 'monospace' }}>
+            EVT-{String(detection.eventId).padStart(5, '0')}
+          </span>
         </div>
+      </div>
+
+      <div className="grid grid-cols-4 divide-x divide-white/5">
+        {[
+          { label: 'OBJETIVO',  value: detection.label.toUpperCase(), hl: undefined },
+          { label: 'CONFIANZA', value: `${conf}%`, hl: confColor },
+          { label: 'UBICACIÓN', value: address || 'Resolviendo...' },
+          {
+            label: 'HORA',
+            value: detection.timestamp.toLocaleTimeString('es-AR', {
+              hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+            }),
+          },
+        ].map(({ label, value, hl }) => (
+          <div key={label} className="flex flex-col px-2.5 py-1.5">
+            <span style={{ color: '#ffffff30', fontSize: '7px', fontFamily: 'monospace', letterSpacing: '0.12em' }}>
+              {label}
+            </span>
+            {hl ? (
+              <span className="font-bold px-1.5 py-0.5 rounded self-start mt-0.5"
+                style={{ color: hl, background: `${hl}18`, border: `1px solid ${hl}40`, fontSize: '11px', fontFamily: 'monospace' }}>
+                {value}
+              </span>
+            ) : (
+              <span className="font-bold truncate" style={{ color: '#ffffff', fontSize: '9px', fontFamily: 'monospace' }}>
+                {value}
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -288,22 +280,26 @@ function EvidenceCard({ detection, address }: { detection: Detection; address: s
 
 // ── Main HUD ─────────────────────────────────────────────────────────────────
 export default function SentraHUD() {
-  const { geo, diag, armed, arm, disarm, triggerHaptic, pendingMessages, rtt } = useSentraCore();
+  const { geo, diag, arm, disarm, triggerHaptic, pendingMessages, rtt } = useSentraCore();
+  const { state, setArmed: setGlobalArmed } = useApp();
   const { metrics, stressAlert } = useTacticalDashboard();
   const demoMode = useDemoMode();
 
-  const [phase,         setPhase]         = useState<Phase>('BOOT');
+  // armed is the single source of truth — persisted in AppContext + localStorage
+  const armed = state.armed;
+
+  const [phase,         setPhase]         = useState<Phase>(() => state.armed ? 'ARMED' : 'BOOT');
   const [rawLogs,       setRawLogs]       = useState<TacticalLog[]>([]);
-  const [showVision,    setShowVision]    = useState(false);
-  const [showIA,        setShowIA]        = useState(false);
+  const [showVision,    setShowVision]    = useState(state.armed);
+  const [showIA,        setShowIA]        = useState(state.armed);
   const [arming,        setArming]        = useState(false);
   const [cameraModal,   setCameraModal]   = useState<string | null>(null);
   const [lastDetection, setLastDetection] = useState<Detection | null>(null);
 
-  const logs        = useDebounce(rawLogs, 400);
-  const logIdRef    = useRef(0);
-  const eventIdRef  = useRef(0);
-  const consoleRef  = useRef<HTMLDivElement>(null);
+  const logs       = useDebounce(rawLogs, 400);
+  const logIdRef   = useRef(0);
+  const eventIdRef = useRef(0);
+  const consoleRef = useRef<HTMLDivElement>(null);
 
   const addLog = useCallback((msg: string, level: TacticalLog['level'] = 'sys') => {
     setRawLogs((prev) => [
@@ -316,7 +312,7 @@ export default function SentraHUD() {
     if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
   }, [logs]);
 
-  // Boot sequence
+  // Boot sequence — skips straight to ARMED if returning from another tab
   const booted = useRef(false);
   useEffect(() => {
     if (booted.current || diag.indexeddb === undefined) return;
@@ -334,13 +330,23 @@ export default function SentraHUD() {
       addLog(`🟢 IDB: ${diag.indexeddb ? 'OK' : 'FALLO'}`, diag.indexeddb ? 'ok' : 'crit');
       addLog(`🟢 WORKERS: ${diag.webWorker ? 'OK' : 'FALLO'}`, diag.webWorker ? 'ok' : 'crit');
       await new Promise((r) => setTimeout(r, 300));
-      addLog(
-        diag.ready ? '🟢 Sistema listo. Esperando armado.' : '⚠️ Sistema degradado — revisar permisos.',
-        diag.ready ? 'ok' : 'warn'
-      );
-      setPhase('STANDBY');
+
+      if (state.armed) {
+        addLog('🔒 Sesión armada restaurada desde estado persistente', 'ok');
+        setPhase('ARMED');
+        setShowVision(true);
+        setShowIA(true);
+        await arm(); // re-attach geo watchers
+      } else {
+        addLog(
+          diag.ready ? '🟢 Sistema listo. Esperando armado.' : '⚠️ Sistema degradado — revisar permisos.',
+          diag.ready ? 'ok' : 'warn'
+        );
+        setPhase('STANDBY');
+      }
     };
     seq();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diag.ready]);
 
   // Mesh event subscriptions
@@ -351,19 +357,12 @@ export default function SentraHUD() {
         setPhase('ALERT');
         addLog(`👁️ VISIÓN: ${label.toUpperCase()} detectado — ${(confidence * 100).toFixed(0)}% confianza`, 'crit');
         triggerHaptic([200, 100, 200, 100, 400]);
-        setLastDetection({
-          label, confidence,
-          timestamp: new Date(),
-          eventId: ++eventIdRef.current,
-        });
+        setLastDetection({ label, confidence, timestamp: new Date(), eventId: ++eventIdRef.current });
       }),
       mesh.on('SPEECH_COERCION', (e) => {
         const { isSilentTrigger } = e.payload as { isSilentTrigger: boolean };
         setPhase('CODE_RED');
-        addLog(
-          isSilentTrigger ? '🚨 IA: CÓDIGO ROJO SILENCIOSO — protocolo activo' : '⚠️ IA: Coacción detectada',
-          'crit'
-        );
+        addLog(isSilentTrigger ? '🚨 IA: CÓDIGO ROJO SILENCIOSO — protocolo activo' : '⚠️ IA: Coacción detectada', 'crit');
         triggerHaptic([500, 200, 500, 200, 1000]);
       }),
       mesh.on('EMERGENCY_DISPATCH', () => {
@@ -372,7 +371,7 @@ export default function SentraHUD() {
         setTimeout(() => setPhase(armed ? 'ARMED' : 'STANDBY'), 10_000);
       }),
       mesh.on('GEO_UPDATE', () => {
-        if (phase === 'ARMED') addLog(`📍 GEO: ${geo.address}`, 'net');
+        if (armed) addLog(`📍 GEO: ${geo.address}`, 'net');
       }),
       mesh.on('AUDIO_ALERT', (e) => {
         const { alerta } = e.payload as { alerta: string };
@@ -391,15 +390,16 @@ export default function SentraHUD() {
       }),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [armed, phase, geo.address, triggerHaptic, addLog]);
+  }, [armed, geo.address, triggerHaptic, addLog]);
 
-  // ARM toggle
+  // ARM toggle — writes to global context for cross-tab persistence
   const handleArmToggle = useCallback(async () => {
     if (arming) return;
     setArming(true);
     if (!armed) {
       addLog('🔒 Armando sistema...', 'sys');
       await arm();
+      setGlobalArmed(true);
       setPhase('ARMED');
       setShowVision(true);
       setShowIA(true);
@@ -414,6 +414,7 @@ export default function SentraHUD() {
     } else {
       addLog('🔓 Desarmando sistema...', 'warn');
       await disarm();
+      setGlobalArmed(false);
       setPhase('STANDBY');
       setShowVision(false);
       setShowIA(false);
@@ -427,7 +428,7 @@ export default function SentraHUD() {
       });
     }
     setArming(false);
-  }, [armed, arming, arm, disarm, addLog, triggerHaptic, geo]);
+  }, [armed, arming, arm, disarm, addLog, triggerHaptic, geo, setGlobalArmed]);
 
   const handleAudioAlert = useCallback((log: AudioAlertLog) => {
     addLog(`🔴 AUDIO: ${log.alerta}`, 'crit');
@@ -435,19 +436,21 @@ export default function SentraHUD() {
     setPhase('ALERT');
   }, [addLog, triggerHaptic]);
 
-  const color      = PHASE_COLOR[phase];
+  const color       = PHASE_COLOR[phase];
   const stressLevel = metrics.stressLevel;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden font-mono select-none"
-      style={{ background: '#000000', color: '#00FF00' }}>
+    <div className="flex flex-col font-mono select-none" style={{ background: '#000000', color: '#00FF00', minHeight: '100%' }}>
 
-      {/* ── Status bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-1 border-b text-xs flex-shrink-0"
+      {/* ── Status bar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-1 border-b flex-shrink-0"
         style={{ borderColor: `${color}25`, background: `${color}06` }}>
         <div className="flex items-center gap-2">
-          <span className="font-bold tracking-[0.2em]" style={{ color }}>SENTRA</span>
-          <span style={{ color: `${color}50` }}>v3.0</span>
+          <span className="font-bold tracking-[0.2em] text-xs" style={{ color }}>SENTRA</span>
+          <span className="text-xs" style={{ color: `${color}50` }}>v3.0</span>
+          {state.armed && (
+            <span className="text-xs font-bold tracking-widest animate-pulse" style={{ color: '#00FF00' }}>● ACTIVO</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
@@ -468,8 +471,6 @@ export default function SentraHUD() {
             style={{ color, background: `${color}12`, border: `1px solid ${color}35` }}>
             {phase}
           </span>
-
-          {/* MODO DEMO button */}
           <button
             onClick={() => !demoMode.isRunning && demoMode.run({ arm, armed, addLog, geo })}
             disabled={demoMode.isRunning}
@@ -480,9 +481,7 @@ export default function SentraHUD() {
               border:        `1px solid rgba(234,179,8,${demoMode.isRunning ? '0.55' : '0.28'})`,
               color:         demoMode.isRunning ? '#eab308' : '#eab30868',
               cursor:        demoMode.isRunning ? 'not-allowed' : 'pointer',
-              fontSize:      '9px',
-              fontWeight:    700,
-              letterSpacing: '0.1em',
+              fontSize:      '9px', fontWeight: 700, letterSpacing: '0.1em',
             }}
           >
             {demoMode.isRunning
@@ -493,15 +492,14 @@ export default function SentraHUD() {
         </div>
       </div>
 
-      {/* ── Top grid: Radar (left) + Info (right) ────────────────────────── */}
-      <div className="grid grid-cols-2 gap-0 flex-shrink-0"
-        style={{ maxHeight: 'calc(50dvh - 72px)' }}>
+      {/* ── Top grid: 40/60 asimétrico ─────────────────────────────────────── */}
+      <div className="grid flex-shrink-0" style={{ gridTemplateColumns: '40% 60%', minHeight: '220px' }}>
 
-        {/* LEFT: Radar + ARM + Diag */}
-        <div className="flex flex-col items-center justify-between py-2 px-2 border-r overflow-hidden"
+        {/* LEFT — Radar + ARM + Diag */}
+        <div className="flex flex-col items-center justify-between py-2 px-2 border-r"
           style={{ borderColor: `${color}18` }}>
 
-          <div className="relative w-full aspect-square max-w-[170px]">
+          <div className="relative w-full" style={{ maxWidth: '160px', aspectRatio: '1' }}>
             <RadarRings armed={armed} phase={phase} />
             <button
               onClick={handleArmToggle}
@@ -510,7 +508,7 @@ export default function SentraHUD() {
               className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-full transition-all active:scale-95 focus:outline-none"
               style={{ background: 'transparent', cursor: arming || phase === 'LOCKDOWN' ? 'not-allowed' : 'pointer' }}
             >
-              <Radio size={24} style={{ color, filter: `drop-shadow(0 0 8px ${color})` }}
+              <Radio size={22} style={{ color, filter: `drop-shadow(0 0 8px ${color})` }}
                 className={armed ? 'animate-pulse' : ''} />
               <span className="text-xs font-bold tracking-[0.22em]" style={{ color }}>
                 {arming ? '···' : armed ? 'ARMADO' : 'RADAR'}
@@ -519,7 +517,7 @@ export default function SentraHUD() {
           </div>
 
           <button onClick={handleArmToggle} disabled={arming || phase === 'LOCKDOWN'}
-            className="w-full py-1 rounded border font-bold text-xs tracking-widest transition-all active:scale-95"
+            className="w-full py-1 rounded border font-bold text-xs tracking-widest transition-all active:scale-95 mt-1"
             style={{
               borderColor: color, color,
               background:  armed ? `${color}18` : 'transparent',
@@ -531,8 +529,8 @@ export default function SentraHUD() {
               : <><Unlock size={11} className="inline mr-1" />ARMAR</>}
           </button>
 
-          <div className="w-full px-1">
-            <p className="text-xs mb-0.5 tracking-widest" style={{ color: `${color}40` }}>HW</p>
+          <div className="w-full px-1 mt-1">
+            <p style={{ color: `${color}40`, fontSize: '7px', letterSpacing: '0.18em', marginBottom: '2px' }}>HW</p>
             <DiagRow label="CAM" ok={diag.camera} />
             <DiagRow label="MIC" ok={diag.microphone} />
             <DiagRow label="GEO" ok={diag.geolocation} />
@@ -540,49 +538,53 @@ export default function SentraHUD() {
           </div>
         </div>
 
-        {/* RIGHT: Geo + Cognitive Load + System Health + Operator + IA */}
-        <div className="flex flex-col overflow-y-auto min-h-0"
-          style={{ scrollbarWidth: 'none' }}>
+        {/* RIGHT — Info panels */}
+        <div className="flex flex-col">
 
-          {/* Geo */}
-          <div className="p-2 border-b flex-shrink-0" style={{ borderColor: `${color}18` }}>
-            <div className="flex items-center gap-1 mb-0.5">
-              <MapPin size={9} style={{ color }} />
-              <span style={{ color: `${color}55`, fontSize: 8, letterSpacing: '0.15em' }}>POSICIÓN</span>
+          {/* Geo + Operator */}
+          <div className="grid grid-cols-2 border-b" style={{ borderColor: `${color}18` }}>
+            <div className="p-2 border-r" style={{ borderColor: `${color}18` }}>
+              <div className="flex items-center gap-1 mb-0.5">
+                <MapPin size={8} style={{ color }} />
+                <span style={{ color: `${color}55`, fontSize: 7, letterSpacing: '0.15em' }}>POSICIÓN</span>
+              </div>
+              <p className="font-mono leading-tight" style={{ color, fontSize: '8px' }}>
+                {geo.latitude !== null
+                  ? `${geo.latitude.toFixed(4)}, ${geo.longitude?.toFixed(4)}`
+                  : armed ? 'Adquiriendo...' : '—'}
+              </p>
+              <p className="leading-tight mt-0.5 truncate" style={{ color: `${color}60`, fontSize: '7px' }}>
+                {geo.address}
+              </p>
             </div>
-            <p className="font-mono leading-tight" style={{ color, fontSize: '9px' }}>
-              {geo.latitude !== null
-                ? `${geo.latitude.toFixed(5)}, ${geo.longitude?.toFixed(5)}`
-                : armed ? 'Adquiriendo...' : '— no armado —'}
-            </p>
-            <p className="leading-tight mt-0.5 truncate" style={{ color: `${color}60`, fontSize: '8px' }}>
-              {geo.address}
-            </p>
-          </div>
-
-          {/* Cognitive Load Ring */}
-          <div className="py-1.5 border-b flex-shrink-0" style={{ borderColor: `${color}18` }}>
-            <CognitiveRing value={stressLevel} alert={stressAlert} />
-          </div>
-
-          {/* System Health */}
-          <div className="border-b flex-shrink-0 pt-1.5" style={{ borderColor: `${color}18` }}>
-            <SystemHealth
-              diag={diag}
-              showIA={showIA}
-              armed={armed}
-              pendingMessages={pendingMessages}
-            />
-          </div>
-
-          {/* Operator */}
-          <div className="p-2 border-b flex-shrink-0" style={{ borderColor: `${color}18` }}>
-            <div className="flex items-center gap-1 mb-0.5">
-              <Activity size={9} style={{ color }} />
-              <span style={{ color: `${color}55`, fontSize: 8, letterSpacing: '0.15em' }}>OPERADOR</span>
+            <div className="p-2">
+              <div className="flex items-center gap-1 mb-0.5">
+                <Activity size={8} style={{ color }} />
+                <span style={{ color: `${color}55`, fontSize: 7, letterSpacing: '0.15em' }}>OPERADOR</span>
+              </div>
+              <p className="text-xs font-bold" style={{ color }}>Matías</p>
+              <p style={{ color: `${color}50`, fontSize: '8px' }}>{armed ? 'En servicio' : 'En espera'}</p>
+              {state.armedAt && (
+                <p style={{ color: `${color}35`, fontSize: '7px', fontFamily: 'monospace' }}>
+                  desde {new Date(state.armedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
             </div>
-            <p className="text-xs font-bold" style={{ color }}>Matías</p>
-            <p style={{ color: `${color}50`, fontSize: '8px' }}>{armed ? 'Sensores activos' : 'En espera'}</p>
+          </div>
+
+          {/* Cognitive Load + System Health */}
+          <div className="grid grid-cols-2 border-b flex-shrink-0" style={{ borderColor: `${color}18` }}>
+            <div className="py-1.5 border-r" style={{ borderColor: `${color}18` }}>
+              <CognitiveRing value={stressLevel} alert={stressAlert} />
+            </div>
+            <div className="pt-1.5">
+              <SystemHealth
+                diag={diag}
+                showIA={showIA}
+                armed={armed}
+                pendingMessages={pendingMessages}
+              />
+            </div>
           </div>
 
           {showIA && (
@@ -598,9 +600,9 @@ export default function SentraHUD() {
         </div>
       </div>
 
-      {/* ── Vision panel (44dvh) with Evidence Card overlay ──────────────── */}
-      <div className="w-full overflow-hidden border-t relative flex-shrink-0"
-        style={{ height: '44dvh', borderColor: `${color}20` }}>
+      {/* ── Vision panel ─────────────────────────────────────────────────── */}
+      <div className="w-full border-t flex-shrink-0"
+        style={{ height: '46vw', maxHeight: '300px', minHeight: '180px', borderColor: `${color}20` }}>
         {showVision ? (
           <Suspense fallback={
             <div className="h-full flex items-center justify-center" style={{ background: '#000' }}>
@@ -616,27 +618,28 @@ export default function SentraHUD() {
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-1" style={{ background: '#000' }}>
             <p className="text-xs tracking-widest" style={{ color: `${color}25` }}>VISIÓN</p>
-            <p style={{ color: `${color}20`, fontSize: '9px' }}>inactiva</p>
+            <p style={{ color: `${color}20`, fontSize: '9px' }}>inactiva · armar sistema</p>
           </div>
-        )}
-
-        {lastDetection && (
-          <EvidenceCard detection={lastDetection} address={geo.address} />
         )}
       </div>
 
-      {/* ── Línea Temporal de Eventos ────────────────────────────────────── */}
-      <div className="border-t flex flex-col flex-shrink-0" style={{ borderColor: `${color}18`, height: '112px' }}>
+      {/* ── Centro de Evidencia — aparece debajo del feed al detectar ────── */}
+      {lastDetection && (
+        <EvidenceCard detection={lastDetection} address={geo.address} />
+      )}
+
+      {/* ── Línea Temporal de Eventos ─────────────────────────────────────── */}
+      <div className="border-t flex flex-col flex-shrink-0" style={{ borderColor: `${color}18`, height: '120px' }}>
         <div className="flex items-center gap-2 px-3 py-0.5 border-b flex-shrink-0"
           style={{ borderColor: `${color}12` }}>
           <Terminal size={9} style={{ color: `${color}60` }} />
           <span style={{ color: `${color}40`, fontSize: '9px', letterSpacing: '0.18em' }}>LÍNEA TEMPORAL</span>
-          <span className="ml-auto" style={{ color: `${color}30`, fontSize: '9px' }}>{logs.length} eventos</span>
+          <span className="ml-auto" style={{ color: `${color}30`, fontSize: '9px' }}>{logs.length}</span>
           {demoMode.isRunning && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded"
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded ml-1"
               style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.35)' }}>
               <Loader size={8} className="animate-spin" style={{ color: '#eab308' }} />
-              <span style={{ color: '#eab308', fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em' }}>DEMO</span>
+              <span style={{ color: '#eab308', fontSize: '8px', fontWeight: 700 }}>DEMO</span>
             </span>
           )}
         </div>
@@ -645,9 +648,7 @@ export default function SentraHUD() {
             <div key={log.id} className="flex items-start gap-2 leading-tight">
               <span className="flex-shrink-0 tabular-nums"
                 style={{ color: '#00FF0030', fontSize: '9px', minWidth: '54px' }}>
-                [{log.ts.toLocaleTimeString('es-AR', {
-                  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-                })}]
+                [{log.ts.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}]
               </span>
               <span style={{ color: LEVEL_COLOR[log.level], fontSize: '10px', lineHeight: 1.4 }}>
                 {log.msg}

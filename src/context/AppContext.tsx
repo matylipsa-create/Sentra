@@ -35,6 +35,8 @@ const INITIAL_STATE: AppState = {
   agents: loadFromStorage('sentra_agents', DEFAULT_AGENTS),
   isDrawerOpen: false,
   biometricProfile: loadFromStorage('sentra_biometric', DEFAULT_BIOMETRIC),
+  armed: loadFromStorage('sentra_armed', false) as boolean,
+  armedAt: loadFromStorage('sentra_armed_at', null) as number | null,
 };
 
 type Action =
@@ -43,7 +45,8 @@ type Action =
   | { type: 'SET_STATUS'; payload: AgentStatus }
   | { type: 'SET_DRAWER'; payload: boolean }
   | { type: 'UPDATE_AGENT'; payload: Partial<Agent> & { name: Agent['name'] } }
-  | { type: 'UPDATE_BIOMETRIC'; payload: Partial<AppState['biometricProfile']> };
+  | { type: 'UPDATE_BIOMETRIC'; payload: Partial<AppState['biometricProfile']> }
+  | { type: 'SET_ARMED'; payload: boolean };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -73,6 +76,12 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('sentra_biometric', JSON.stringify(biometricProfile));
       return { ...state, biometricProfile };
     }
+    case 'SET_ARMED': {
+      const armedAt = action.payload ? Date.now() : null;
+      localStorage.setItem('sentra_armed', String(action.payload));
+      localStorage.setItem('sentra_armed_at', armedAt !== null ? String(armedAt) : 'null');
+      return { ...state, armed: action.payload, armedAt };
+    }
     default:
       return state;
   }
@@ -86,6 +95,7 @@ interface AppContextValue {
   setDrawer: (open: boolean) => void;
   updateAgent: (update: Partial<Agent> & { name: Agent['name'] }) => void;
   updateBiometric: (update: Partial<AppState['biometricProfile']>) => void;
+  setArmed: (armed: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -105,9 +115,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (update: Partial<AppState['biometricProfile']>) => dispatch({ type: 'UPDATE_BIOMETRIC', payload: update }),
     []
   );
+  const setArmed = useCallback(
+    (armed: boolean) => dispatch({ type: 'SET_ARMED', payload: armed }),
+    []
+  );
 
   return (
-    <AppContext.Provider value={{ state, setTab, setMode, setStatus, setDrawer, updateAgent, updateBiometric }}>
+    <AppContext.Provider value={{ state, setTab, setMode, setStatus, setDrawer, updateAgent, updateBiometric, setArmed }}>
       {children}
     </AppContext.Provider>
   );

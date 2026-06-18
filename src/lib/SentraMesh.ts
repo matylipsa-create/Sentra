@@ -9,6 +9,16 @@ import {
   CACHE_PURGE_AGE_MS,
 } from '../config';
 
+const TELEGRAM_ID_KEY = 'sentra_telegram_chat_id';
+const PIPEDREAM_KEY   = 'sentra_pipedream_url';
+
+// Returns runtime-overridden config values, falling back to compile-time defaults.
+function getRuntimeConfig(): { endpoint: string; channelId: string } {
+  const endpoint  = localStorage.getItem(PIPEDREAM_KEY)   || PIPEDREAM_ENDPOINT;
+  const channelId = localStorage.getItem(TELEGRAM_ID_KEY) || TELEGRAM_CHANNEL_ID;
+  return { endpoint, channelId };
+}
+
 export type MeshEventType =
   | 'SYSTEM_ARMED'
   | 'SYSTEM_DISARMED'
@@ -92,11 +102,15 @@ class SentraMesh {
     }
 
     this.notify(event);
-    await this.dispatchToCerebro({ event_type: type, timestamp: event.timestamp, channel_id: TELEGRAM_CHANNEL_ID, data: payload, sentra_version: '3.0' }, event);
+    const { endpoint, channelId } = getRuntimeConfig();
+    await this.dispatchToCerebro({ event_type: type, timestamp: event.timestamp, channel_id: channelId, data: payload, sentra_version: '3.0' }, event, endpoint, channelId);
   }
 
   // Main dispatch function — POST to Cerebro (Pipedream) with retry on IDB
-  async dispatchToCerebro(payload: CerebroPayload, sourceEvent?: MeshEvent): Promise<boolean> {
+  async dispatchToCerebro(payload: CerebroPayload, sourceEvent?: MeshEvent, endpoint?: string, channelId?: string): Promise<boolean> {
+    const url     = endpoint  ?? getRuntimeConfig().endpoint;
+    const channel = channelId ?? getRuntimeConfig().channelId;
+
     if (!navigator.onLine) {
       await this.enqueueRetry(sourceEvent);
       return false;
@@ -111,15 +125,15 @@ class SentraMesh {
 
     try {
       const start = performance.now();
-      const res = await fetch(PIPEDREAM_ENDPOINT, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type':     'application/json',
           'X-SENTRA-Version': '3.0',
-          'X-Channel-ID': TELEGRAM_CHANNEL_ID,
-          'X-Bot-Token': TELEGRAM_BOT_TOKEN,
+          'X-Channel-ID':     channel,
+          'X-Bot-Token':      TELEGRAM_BOT_TOKEN,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, channel_id: channel }),
         signal: AbortSignal.timeout(RTT_THRESHOLD_MS * 3),
       });
       this.rtt = performance.now() - start;
@@ -167,7 +181,7 @@ class SentraMesh {
       for (const event of unsent) {
         if (event.retries >= MAX_RETRIES) continue;
         const ok = await this.dispatchToCerebro(
-          { event_type: event.type, timestamp: event.timestamp, channel_id: TELEGRAM_CHANNEL_ID, data: event.payload, sentra_version: '3.0' },
+          { event_type: event.type, timestamp: event.timestamp, channel_id: getRuntimeConfig().channelId, data: event.payload, sentra_version: '3.0' },
           event
         );
         if (ok) flushed++;
@@ -192,8 +206,9 @@ class SentraMesh {
   }
 
   measureRTT(): void {
+    const { endpoint } = getRuntimeConfig();
     const start = performance.now();
-    fetch(PIPEDREAM_ENDPOINT, { method: 'HEAD', signal: AbortSignal.timeout(2000) })
+    fetch(endpoint, { method: 'HEAD', signal: AbortSignal.timeout(2000) })
       .then(() => { this.rtt = performance.now() - start; })
       .catch(() => { this.rtt = 9999; });
   }

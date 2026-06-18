@@ -54,4 +54,6 @@ export interface AppState {
   agents: Agent[];
   isDrawerOpen: boolean;
   biometricProfile: BiometricProfile;
+  armed: boolean;
+  armedAt: number | null;
 }
