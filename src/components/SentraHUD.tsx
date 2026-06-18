@@ -13,6 +13,7 @@ import { mesh } from '../lib/SentraMesh';
 import AudioEngine from './AudioEngine';
 import type { AudioAlertLog } from './AudioEngine';
 import { pipedreamOrchestrator } from '../lib/pipedream';
+import type { MdaoAlertType } from './SentraVisionPanel';
 
 const SentraVisionPanel = lazy(() => import('./SentraVisionPanel'));
 const SentraIAPanel     = lazy(() => import('./SentraIAPanel'));
@@ -388,6 +389,32 @@ export default function SentraHUD() {
         const { message } = e.payload as { message: string };
         setCameraModal(message);
       }),
+      // ── MDAO events ──────────────────────────────────────────────────────
+      mesh.on('ADVERSARIAL_GARMENT', (e) => {
+        const { label, confidence } = e.payload as { label: string; confidence: number };
+        setPhase('ALERT');
+        addLog(`⚠️ MDAO-A: PRENDA ADVERSARIA — ${label.toUpperCase()} (${((confidence ?? 0) * 100).toFixed(0)}%)`, 'crit');
+        triggerHaptic([300, 100, 300]);
+        setLastDetection({
+          label:      `PRENDA ADVERSARIA: ${label}`,
+          confidence: confidence ?? 0.9,
+          timestamp:  new Date(),
+          eventId:    ++eventIdRef.current,
+        });
+      }),
+      mesh.on('FACE_DENSITY', (e) => {
+        const { count } = e.payload as { count: number };
+        addLog(`🟣 MDAO-B: Saturación por Ropa Adversaria Facial — ${count} rostros solapados`, 'warn');
+        setPhase((p) => (p === 'ARMED' ? 'ALERT' : p));
+        triggerHaptic([100, 50, 100]);
+      }),
+      mesh.on('IR_SABOTAGE', (e) => {
+        const { whiteness } = e.payload as { whiteness: number };
+        setPhase('LOCKDOWN');
+        addLog(`⚡ MDAO-C: SABOTAJE IR — saturación blanca ${((whiteness ?? 0) * 100).toFixed(0)}% — LOCKDOWN`, 'crit');
+        triggerHaptic([500, 150, 500, 150, 800]);
+        setTimeout(() => setPhase(armed ? 'ARMED' : 'STANDBY'), 15_000);
+      }),
     ];
     return () => unsubs.forEach((u) => u());
   }, [armed, geo.address, triggerHaptic, addLog]);
@@ -435,6 +462,16 @@ export default function SentraHUD() {
     triggerHaptic([150, 80, 150]);
     setPhase('ALERT');
   }, [addLog, triggerHaptic]);
+
+  // MDAO callback — routes anomaly directly through mesh so BatchDispatcher + IDB handle it
+  const handleMdaoAlert = useCallback((type: MdaoAlertType, detail: string) => {
+    const payloads: Record<MdaoAlertType, object> = {
+      ADVERSARIAL_GARMENT: { anomalyType: 'ADVERSARIAL_GARMENT', detail },
+      FACE_DENSITY:        { anomalyType: 'FACE_DENSITY',        detail },
+      IR_SABOTAGE:         { anomalyType: 'IR_SABOTAGE',         detail },
+    };
+    mesh.emit(type, payloads[type]);
+  }, []);
 
   const color       = PHASE_COLOR[phase];
   const stressLevel = metrics.stressLevel;
@@ -612,6 +649,7 @@ export default function SentraHUD() {
             <SentraVisionPanel
               onThreat={(label, confidence) => mesh.emit('VISION_ALERT', { label, confidence })}
               onCameraBlocked={(msg) => mesh.emit('CAMERA_PERMISSION_DENIED', { message: msg })}
+              onMdaoAlert={handleMdaoAlert}
               location={geo.latitude !== null ? { latitude: geo.latitude, longitude: geo.longitude! } : null}
             />
           </Suspense>

@@ -8,6 +8,7 @@ import {
   FLUSH_INTERVAL_MS,
   CACHE_PURGE_AGE_MS,
 } from '../config';
+import { batchDispatcher } from './batchDispatcher';
 
 const TELEGRAM_ID_KEY = 'sentra_telegram_chat_id';
 const PIPEDREAM_KEY   = 'sentra_pipedream_url';
@@ -31,7 +32,11 @@ export type MeshEventType =
   | 'FALLBACK_QUEUED'
   | 'FALLBACK_FLUSHED'
   | 'CAMERA_PERMISSION_DENIED'
-  | 'AUDIO_ALERT';
+  | 'AUDIO_ALERT'
+  // ── MDAO adversarial detection events ────────────────────────────────────
+  | 'ADVERSARIAL_GARMENT'   // silhouette + non-human label → anti-AI clothing
+  | 'FACE_DENSITY'          // ≥3 clustered person detections (HyperFace)
+  | 'IR_SABOTAGE';          // sudden full-white sector (optical sabotage)
 
 export interface MeshEvent {
   id?: number;
@@ -53,7 +58,7 @@ export interface CerebroPayload {
 type Handler = (event: MeshEvent) => void;
 
 const DB_NAME = 'sentra_mesh_v3';
-const STORE = 'events';
+const STORE   = 'events';
 
 class SentraMesh {
   private static instance: SentraMesh | null = null;
@@ -87,6 +92,17 @@ class SentraMesh {
     return () => this.handlers.get(type)?.delete(handler);
   }
 
+  /**
+   * Emit a mesh event.
+   *
+   * Flow:
+   *  1. notify()  — fires all local handlers synchronously (visual updates always happen)
+   *  2. batchDispatcher.enqueue() — checks 30 s debounce; returns false when suppressed
+   *  3. If accepted: store in IDB for reliable retry on failed HTTP calls
+   *
+   * batchDispatcher handles HTTP dispatch (batched 15 s window or immediate for criticals).
+   * flushLoop provides the retry safety-net for any failed dispatches from the batch.
+   */
   async emit(type: MeshEventType, payload: unknown): Promise<void> {
     const event: MeshEvent = {
       type,
@@ -96,18 +112,26 @@ class SentraMesh {
       retries: 0,
     };
 
+    // Always fire local handlers — UI updates are never debounce-suppressed
+    this.notify(event);
+
+    // Route through batch dispatcher; returns false when debounced (duplicate within 30 s)
+    const accepted = batchDispatcher.enqueue(type, payload);
+    if (!accepted) return;
+
     if (this.db) {
       const id = await this.db.add(STORE, event);
       event.id = id as number;
     }
-
-    this.notify(event);
-    const { endpoint, channelId } = getRuntimeConfig();
-    await this.dispatchToCerebro({ event_type: type, timestamp: event.timestamp, channel_id: channelId, data: payload, sentra_version: '3.0' }, event, endpoint, channelId);
   }
 
-  // Main dispatch function — POST to Cerebro (Pipedream) with retry on IDB
-  async dispatchToCerebro(payload: CerebroPayload, sourceEvent?: MeshEvent, endpoint?: string, channelId?: string): Promise<boolean> {
+  // Direct Cerebro dispatch — used only by flushLoop for IDB retries
+  async dispatchToCerebro(
+    payload: CerebroPayload,
+    sourceEvent?: MeshEvent,
+    endpoint?: string,
+    channelId?: string,
+  ): Promise<boolean> {
     const url     = endpoint  ?? getRuntimeConfig().endpoint;
     const channel = channelId ?? getRuntimeConfig().channelId;
 
@@ -153,7 +177,7 @@ class SentraMesh {
 
   private async enqueueRetry(event?: MeshEvent): Promise<void> {
     if (!this.db || !event?.id) return;
-    const tx = this.db.transaction(STORE, 'readwrite');
+    const tx     = this.db.transaction(STORE, 'readwrite');
     const stored = await tx.store.get(event.id);
     if (stored) await tx.store.put({ ...stored, retries: stored.retries + 1 });
     await tx.done;
@@ -161,13 +185,13 @@ class SentraMesh {
 
   private notify(event: MeshEvent): void {
     this.handlers.get(event.type)?.forEach((h) => {
-      try { h(event); } catch { /* isolate */ }
+      try { h(event); } catch { /* isolate handler errors */ }
     });
   }
 
   private async markSent(event: MeshEvent): Promise<void> {
     if (!this.db || !event.id) return;
-    const tx = this.db.transaction(STORE, 'readwrite');
+    const tx     = this.db.transaction(STORE, 'readwrite');
     const stored = await tx.store.get(event.id);
     if (stored) await tx.store.put({ ...stored, sent: true });
     await tx.done;
@@ -181,12 +205,26 @@ class SentraMesh {
       for (const event of unsent) {
         if (event.retries >= MAX_RETRIES) continue;
         const ok = await this.dispatchToCerebro(
-          { event_type: event.type, timestamp: event.timestamp, channel_id: getRuntimeConfig().channelId, data: event.payload, sentra_version: '3.0' },
+          {
+            event_type:     event.type,
+            timestamp:      event.timestamp,
+            channel_id:     getRuntimeConfig().channelId,
+            data:           event.payload,
+            sentra_version: '3.0',
+          },
           event
         );
         if (ok) flushed++;
       }
-      if (flushed > 0) this.notify({ type: 'FALLBACK_FLUSHED', payload: { count: flushed }, timestamp: Date.now(), sent: true, retries: 0 });
+      if (flushed > 0) {
+        this.notify({
+          type:      'FALLBACK_FLUSHED',
+          payload:   { count: flushed },
+          timestamp: Date.now(),
+          sent:      true,
+          retries:   0,
+        });
+      }
       await this.purgeOld();
     };
 
@@ -197,8 +235,8 @@ class SentraMesh {
   private async purgeOld(): Promise<void> {
     if (!this.db) return;
     const cutoff = Date.now() - CACHE_PURGE_AGE_MS;
-    const all = await this.db.getAll(STORE);
-    const tx = this.db.transaction(STORE, 'readwrite');
+    const all    = await this.db.getAll(STORE);
+    const tx     = this.db.transaction(STORE, 'readwrite');
     for (const e of all) {
       if (e.sent && e.timestamp < cutoff) await tx.store.delete(e.id);
     }

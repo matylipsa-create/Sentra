@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Camera, Home, AlertTriangle, Send,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  ZoomIn, ZoomOut,
+  ZoomIn, ZoomOut, ShieldAlert,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -13,9 +13,12 @@ interface Detection {
   bbox: [number, number, number, number];
 }
 
+export type MdaoAlertType = 'ADVERSARIAL_GARMENT' | 'FACE_DENSITY' | 'IR_SABOTAGE';
+
 interface Props {
   onThreat: (label: string, confidence: number) => void;
   onCameraBlocked?: (msg: string) => void;
+  onMdaoAlert?: (type: MdaoAlertType, detail: string) => void;
   location?: { latitude: number; longitude: number } | null;
 }
 
@@ -24,11 +27,18 @@ type PtzDir = 'up' | 'down' | 'left' | 'right' | 'zoom_in' | 'zoom_out';
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const MODE_KEY       = 'sentra_mode';
-const REMOTE_URL_KEY = 'sentra_camera_url';   // shared with Settings panel
+const REMOTE_URL_KEY = 'sentra_camera_url';
 const RETRY_MS       = 5000;
 const DEFAULT_REMOTE = '';
 
-// ── PTZ hook — completely isolated from the video stream ───────────────────
+// MDAO overlay config — label + accent colour per anomaly type
+const MDAO_CONFIG: Record<MdaoAlertType, { label: string; color: string }> = {
+  ADVERSARIAL_GARMENT: { label: 'PRENDA ADVERSARIA',   color: '#FF6B00' },
+  FACE_DENSITY:        { label: 'SATURACIÓN FACIAL',   color: '#FF00FF' },
+  IR_SABOTAGE:         { label: 'SABOTAJE IR',          color: '#FF0000' },
+};
+
+// ── PTZ hook ───────────────────────────────────────────────────────────────
 
 function usePTZ(mode: 'LOCAL' | 'REMOTE') {
   const holdRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -38,11 +48,9 @@ function usePTZ(mode: 'LOCAL' | 'REMOTE') {
 
   const sendCommand = useCallback((direction: PtzDir) => {
     if (mode !== 'REMOTE') return;
-    const base = localStorage.getItem(REMOTE_URL_KEY) || DEFAULT_REMOTE;
-    // Strip trailing stream path so PTZ endpoint is always at the camera root
+    const base   = localStorage.getItem(REMOTE_URL_KEY) || DEFAULT_REMOTE;
     const origin = base.replace(/\/video$/, '').replace(/\/$/, '');
-    const url    = `${origin}/ptz?direction=${direction}`;
-    fetch(url, { method: 'GET', signal: AbortSignal.timeout(1500) }).catch(() => {});
+    fetch(`${origin}/ptz?direction=${direction}`, { method: 'GET', signal: AbortSignal.timeout(1500) }).catch(() => {});
   }, [mode]);
 
   const press = useCallback((dir: PtzDir) => {
@@ -64,7 +72,7 @@ function usePTZ(mode: 'LOCAL' | 'REMOTE') {
   }, []);
 
   useEffect(() => () => {
-    if (holdRef.current) clearInterval(holdRef.current);
+    if (holdRef.current)  clearInterval(holdRef.current);
     if (hideTimer.current) clearTimeout(hideTimer.current);
   }, []);
 
@@ -96,9 +104,7 @@ function useSwipe(
       const dist = Math.hypot(dx, dy);
       const dt   = Date.now() - startT;
 
-      // Tap — reveal controls
       if (dist < 12 && dt < 300) { onTap(); return; }
-      // Swipe threshold
       if (dist < 30) return;
 
       const dir: PtzDir = Math.abs(dx) > Math.abs(dy)
@@ -118,7 +124,7 @@ function useSwipe(
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function SentraVisionPanel({ onThreat, onCameraBlocked, location }: Props) {
+export default function SentraVisionPanel({ onThreat, onCameraBlocked, onMdaoAlert, location }: Props) {
   const videoRef    = useRef<HTMLVideoElement>(null);
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const videoWrap   = useRef<HTMLDivElement>(null);
@@ -128,14 +134,16 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
   const retryRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef  = useRef(true);
 
-  const [mode, setMode]         = useState<'LOCAL' | 'REMOTE'>(
-    () => (localStorage.getItem(MODE_KEY) as 'LOCAL' | 'REMOTE') || 'LOCAL'
+  const [mode, setMode]             = useState<'LOCAL' | 'REMOTE'>(
+    () => (localStorage.getItem(MODE_KEY) as 'LOCAL' | 'REMOTE') || 'LOCAL',
   );
-  const [modelReady, setModelReady]   = useState(false);
-  const [detections, setDetections]   = useState<Detection[]>([]);
-  const [threats, setThreats]         = useState<Detection[]>([]);
-  const [status, setStatus]           = useState<'CONNECTING' | 'ACTIVE' | 'ERROR'>('CONNECTING');
-  const [lastAlert, setLastAlert]     = useState<string | null>(null);
+  const [modelReady, setModelReady] = useState(false);
+  const [detections, setDetections] = useState<Detection[]>([]);
+  const [threats,    setThreats]    = useState<Detection[]>([]);
+  const [status,     setStatus]     = useState<'CONNECTING' | 'ACTIVE' | 'ERROR'>('CONNECTING');
+  const [lastAlert,  setLastAlert]  = useState<string | null>(null);
+  const [mdaoAlert,  setMdaoAlert]  = useState<{ type: MdaoAlertType; detail: string } | null>(null);
+  const mdaoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ptz = usePTZ(mode);
 
@@ -146,13 +154,22 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
   );
 
   // ── Helpers ──────────────────────────────────────────────────────────────
-  const clearRetry = () => { if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; } };
+  const clearRetry  = () => { if (retryRef.current)  { clearTimeout(retryRef.current);  retryRef.current  = null; } };
+  const stopCapture = () => { if (captureRef.current) { clearInterval(captureRef.current); captureRef.current = null; } };
+  const stopStream  = () => { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; };
+
   const scheduleRetry = useCallback((fn: () => void) => {
     clearRetry();
     retryRef.current = setTimeout(() => { if (mountedRef.current) fn(); }, RETRY_MS);
   }, []);
-  const stopCapture = () => { if (captureRef.current) { clearInterval(captureRef.current); captureRef.current = null; } };
-  const stopStream  = () => { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; };
+
+  // Shows an MDAO overlay badge for 6 seconds, then clears
+  const triggerMdaoOverlay = useCallback((type: MdaoAlertType, detail: string) => {
+    setMdaoAlert({ type, detail });
+    if (mdaoTimerRef.current) clearTimeout(mdaoTimerRef.current);
+    mdaoTimerRef.current = setTimeout(() => setMdaoAlert(null), 6_000);
+    onMdaoAlert?.(type, detail);
+  }, [onMdaoAlert]);
 
   // ── Worker ────────────────────────────────────────────────────────────────
   const teardownWorker = useCallback(() => {
@@ -167,34 +184,51 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
     teardownWorker();
     const worker = new Worker(
       new URL('../workers/sentraVision.worker.ts', import.meta.url),
-      { type: 'module' }
+      { type: 'module' },
     );
     worker.onmessage = (e) => {
       const { type } = e.data;
+
       if (type === 'MODEL_READY') {
         setModelReady(true);
+
       } else if (type === 'DETECTIONS') {
         setDetections(e.data.predictions ?? []);
         setThreats(e.data.threats ?? []);
         for (const t of (e.data.threats ?? [])) onThreat(t.class, t.score);
+
+      } else if (type === 'THREAT_DETECTED') {
+        // Worker-rate-limited re-post of a threat; forward to main mesh
+        onThreat(e.data.detected.class, e.data.detected.score);
+
       } else if (type === 'ALERT_SENT') {
         setLastAlert(`${e.data.detected.class} → Pipedream`);
         setTimeout(() => setLastAlert(null), 3000);
-      } else if (type === 'ALERT_FAILED') {
-        onThreat(e.data.detected.class, e.data.detected.score);
+
+      } else if (type === 'ADVERSARIAL_GARMENT') {
+        const detail = `ANOMALÍA: ${(e.data.label as string).toUpperCase()} — confianza ${((e.data.confidence as number) * 100).toFixed(0)}%`;
+        triggerMdaoOverlay('ADVERSARIAL_GARMENT', detail);
+
+      } else if (type === 'FACE_DENSITY') {
+        const detail = `${e.data.count as number} rostros solapados (umbral HyperFace)`;
+        triggerMdaoOverlay('FACE_DENSITY', detail);
+
+      } else if (type === 'IR_SABOTAGE') {
+        const detail = `Saturación IR — blancura ${((e.data.whiteness as number) * 100).toFixed(0)}%`;
+        triggerMdaoOverlay('IR_SABOTAGE', detail);
+
       } else if (type === 'UI_ACTION_REQUEST' && e.data.action === 'SHOW_CAMERA_MODAL') {
         onCameraBlocked?.(e.data.message);
       }
     };
     worker.postMessage({ type: 'INIT' });
     workerRef.current = worker;
-  }, [teardownWorker, onThreat, onCameraBlocked]);
+  }, [teardownWorker, onThreat, onCameraBlocked, triggerMdaoOverlay]);
 
   // ── Capture loop (3 FPS) ─────────────────────────────────────────────────
   const startCapture = useCallback(() => {
     stopCapture();
     captureRef.current = setInterval(() => {
-      // Skip inference when the browser is backgrounded — saves GPU/battery
       if (document.hidden) return;
       const video  = videoRef.current;
       const canvas = canvasRef.current;
@@ -247,13 +281,7 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
     const vid = videoRef.current;
     if (!vid) return;
     const url = (localStorage.getItem(REMOTE_URL_KEY) || '').trim();
-
-    // No URL configured yet — show placeholder, do not attempt connection
-    if (!url) {
-      setStatus('ERROR');
-      return;
-    }
-
+    if (!url) { setStatus('ERROR'); return; }
     try { new URL(url); } catch { setStatus('ERROR'); return; }
     setStatus('CONNECTING');
     vid.srcObject    = null;
@@ -278,7 +306,7 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
   useEffect(() => {
     if (location && workerRef.current) {
       workerRef.current.postMessage({
-        type: 'UPDATE_LOCATION',
+        type:    'UPDATE_LOCATION',
         payload: { latitude: location.latitude, longitude: location.longitude },
       });
     }
@@ -293,6 +321,7 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
       teardownWorker();
       stopStream();
       clearRetry();
+      if (mdaoTimerRef.current) clearTimeout(mdaoTimerRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -301,7 +330,6 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
     else                  initRemote();
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── React to URL changes saved from Settings ─────────────────────────────
   useEffect(() => {
     const handler = (e: StorageEvent) => {
       if (e.key === REMOTE_URL_KEY && mode === 'REMOTE') initRemote();
@@ -320,10 +348,11 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
   const G           = '#00FF00';
   const R           = '#FF4400';
   const C           = '#00BFFF';
-  const borderColor = hasThreat ? R : status === 'ERROR' ? '#FF000060' : `${G}40`;
-  const dotColor    = status === 'ACTIVE' ? G : status === 'CONNECTING' ? '#F59E0B' : '#EF4444';
 
-  // PTZ button helper
+  const activeMdao   = mdaoAlert ? MDAO_CONFIG[mdaoAlert.type] : null;
+  const borderColor  = activeMdao?.color ?? (hasThreat ? R : status === 'ERROR' ? '#FF000060' : `${G}40`);
+  const dotColor     = status === 'ACTIVE' ? G : status === 'CONNECTING' ? '#F59E0B' : '#EF4444';
+
   const PtzBtn = ({
     dir, icon: Icon, style,
   }: {
@@ -340,11 +369,11 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
         className="flex items-center justify-center transition-all select-none"
         style={{
           width: 36, height: 36,
-          background: isActive ? `${C}25` : `rgba(0,0,0,0.55)`,
-          border: `1px solid ${isActive ? C : `${C}40`}`,
-          color: isActive ? C : `${C}80`,
+          background: isActive ? `${C}25` : 'rgba(0,0,0,0.55)',
+          border:     `1px solid ${isActive ? C : `${C}40`}`,
+          color:      isActive ? C : `${C}80`,
           backdropFilter: 'blur(4px)',
-          touchAction: 'none',
+          touchAction:    'none',
           ...style,
         }}
       >
@@ -370,10 +399,9 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
 
         {/* HUD overlay — pointer-events-none */}
         <div className="absolute inset-0 pointer-events-none">
-          {/* Outer border — thin, tactical */}
-          <div className="absolute inset-0" style={{ border: `1px solid ${borderColor}` }} />
+          <div className="absolute inset-0" style={{ border: `1px solid ${borderColor}`, transition: 'border-color 0.3s' }} />
 
-          {/* Edge scanline vignette — only on perimeter, center clear */}
+          {/* Scanline vignette */}
           <div className="absolute inset-0" style={{
             background: `
               linear-gradient(to bottom,
@@ -382,23 +410,24 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
                 rgba(0,255,128,0.02) 3px, rgba(0,255,128,0.02) 4px,
                 transparent 4px
               )`,
-            backgroundSize: '100% 4px',
-            maskImage: 'radial-gradient(ellipse 90% 80% at center, transparent 55%, black 100%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 90% 80% at center, transparent 55%, black 100%)',
+            backgroundSize:   '100% 4px',
+            maskImage:        'radial-gradient(ellipse 90% 80% at center, transparent 55%, black 100%)',
+            WebkitMaskImage:  'radial-gradient(ellipse 90% 80% at center, transparent 55%, black 100%)',
           }} />
 
-          {/* Corner brackets — larger, more tactical */}
+          {/* Corner brackets */}
           {[
-            { pos: 'top-2 left-2',    bt: true,  bb: false, bl: true,  br: false },
-            { pos: 'top-2 right-2',   bt: true,  bb: false, bl: false, br: true  },
-            { pos: 'bottom-2 left-2', bt: false, bb: true,  bl: true,  br: false },
-            { pos: 'bottom-2 right-2',bt: false, bb: true,  bl: false, br: true  },
+            { pos: 'top-2 left-2',     bt: true,  bb: false, bl: true,  br: false },
+            { pos: 'top-2 right-2',    bt: true,  bb: false, bl: false, br: true  },
+            { pos: 'bottom-2 left-2',  bt: false, bb: true,  bl: true,  br: false },
+            { pos: 'bottom-2 right-2', bt: false, bb: true,  bl: false, br: true  },
           ].map(({ pos, bt, bb, bl, br }, i) => (
             <div key={i} className={`absolute ${pos} w-5 h-5`} style={{
-              borderTop:    bt ? `2px solid ${hasThreat ? R : G}` : 'none',
-              borderBottom: bb ? `2px solid ${hasThreat ? R : G}` : 'none',
-              borderLeft:   bl ? `2px solid ${hasThreat ? R : G}` : 'none',
-              borderRight:  br ? `2px solid ${hasThreat ? R : G}` : 'none',
+              borderTop:    bt ? `2px solid ${borderColor}` : 'none',
+              borderBottom: bb ? `2px solid ${borderColor}` : 'none',
+              borderLeft:   bl ? `2px solid ${borderColor}` : 'none',
+              borderRight:  br ? `2px solid ${borderColor}` : 'none',
+              transition:   'border-color 0.3s',
             }} />
           ))}
 
@@ -409,8 +438,27 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
             </span>
           </div>
 
-          {/* Threat badge */}
-          {hasThreat && (
+          {/* ── MDAO anomaly badge — takes priority over standard threat badge */}
+          {activeMdao ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 animate-pulse"
+                style={{
+                  background: `${activeMdao.color}22`,
+                  border: `1.5px solid ${activeMdao.color}`,
+                  backdropFilter: 'blur(4px)',
+                }}>
+                <ShieldAlert size={11} style={{ color: activeMdao.color, flexShrink: 0 }} />
+                <div className="flex flex-col">
+                  <span style={{ color: activeMdao.color, fontSize: '9px', fontFamily: 'monospace', fontWeight: 'bold', letterSpacing: '0.15em' }}>
+                    ANOMALÍA: {activeMdao.label}
+                  </span>
+                  <span style={{ color: `${activeMdao.color}90`, fontSize: '7px', fontFamily: 'monospace' }}>
+                    {mdaoAlert!.detail}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : hasThreat ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex items-center gap-1 px-2 py-1 animate-pulse"
                 style={{ background: 'rgba(255,68,0,0.3)', border: `1px solid ${R}` }}>
@@ -420,7 +468,7 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
                 </span>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Alert-sent flash */}
           {lastAlert && (
@@ -433,17 +481,13 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
             </div>
           )}
 
-          {/* Stream error / no-config overlay */}
+          {/* Stream error overlay */}
           {status === 'ERROR' && (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}>
               {mode === 'REMOTE' && !(localStorage.getItem(REMOTE_URL_KEY) || '').trim() ? (
                 <div className="flex flex-col items-center gap-1">
-                  <p style={{ color: `${C}80`, fontSize: '10px', fontFamily: 'monospace' }}>
-                    ESPERANDO CONFIGURACIÓN
-                  </p>
-                  <p style={{ color: `${C}40`, fontSize: '8px', fontFamily: 'monospace' }}>
-                    Ingresa la URL en Ajustes → Cámara IP
-                  </p>
+                  <p style={{ color: `${C}80`, fontSize: '10px', fontFamily: 'monospace' }}>ESPERANDO CONFIGURACIÓN</p>
+                  <p style={{ color: `${C}40`, fontSize: '8px', fontFamily: 'monospace' }}>Ingresa la URL en Ajustes → Cámara IP</p>
                 </div>
               ) : (
                 <p style={{ color: R, fontSize: '10px', fontFamily: 'monospace' }}>
@@ -453,102 +497,55 @@ export default function SentraVisionPanel({ onThreat, onCameraBlocked, location 
             </div>
           )}
 
-          {/* Swipe hint — shown only once until first tap */}
           {mode === 'REMOTE' && !ptz.visible && status === 'ACTIVE' && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
-              <span style={{ color: `${C}50`, fontSize: '8px', fontFamily: 'monospace' }}>
-                TAP PARA CONTROLES PTZ
-              </span>
+              <span style={{ color: `${C}50`, fontSize: '8px', fontFamily: 'monospace' }}>TAP PARA CONTROLES PTZ</span>
             </div>
           )}
         </div>
 
-        {/* Mode buttons + status dot — interactive, sit on top of HUD */}
+        {/* Mode buttons + status dot */}
         <div className="absolute top-2 left-2 z-50 flex items-center gap-1">
-          <button
-            onClick={() => switchMode('LOCAL')}
-            title="Cámara local"
-            className="p-1.5 border transition-all"
-            style={{
-              background:  mode === 'LOCAL' ? 'rgba(0,255,0,0.15)'  : 'rgba(0,0,0,0.7)',
-              borderColor: mode === 'LOCAL' ? G                      : `${G}25`,
-            }}
-          >
+          <button onClick={() => switchMode('LOCAL')} title="Cámara local" className="p-1.5 border transition-all"
+            style={{ background: mode === 'LOCAL' ? 'rgba(0,255,0,0.15)' : 'rgba(0,0,0,0.7)', borderColor: mode === 'LOCAL' ? G : `${G}25` }}>
             <Camera size={12} style={{ color: mode === 'LOCAL' ? G : `${G}35` }} />
           </button>
-
-          <button
-            onClick={() => switchMode('REMOTE')}
-            title="Cámara IP remota"
-            className="p-1.5 border transition-all"
-            style={{
-              background:  mode === 'REMOTE' ? 'rgba(0,191,255,0.15)' : 'rgba(0,0,0,0.7)',
-              borderColor: mode === 'REMOTE' ? C                       : `${C}25`,
-            }}
-          >
+          <button onClick={() => switchMode('REMOTE')} title="Cámara IP remota" className="p-1.5 border transition-all"
+            style={{ background: mode === 'REMOTE' ? 'rgba(0,191,255,0.15)' : 'rgba(0,0,0,0.7)', borderColor: mode === 'REMOTE' ? C : `${C}25` }}>
             <Home size={12} style={{ color: mode === 'REMOTE' ? C : `${C}35` }} />
           </button>
-
-          <span
-            className={status === 'ACTIVE' ? 'animate-pulse' : ''}
-            style={{
-              display: 'block', width: 6, height: 6, borderRadius: '50%', marginLeft: 2,
-              background: dotColor,
-              boxShadow: status !== 'CONNECTING' ? `0 0 6px ${dotColor}` : 'none',
-            }}
-          />
+          <span className={status === 'ACTIVE' ? 'animate-pulse' : ''}
+            style={{ display: 'block', width: 6, height: 6, borderRadius: '50%', marginLeft: 2,
+              background: dotColor, boxShadow: status !== 'CONNECTING' ? `0 0 6px ${dotColor}` : 'none' }} />
         </div>
       </div>
 
       {/* ── PTZ control zone: 20% height ───────────────────────────────── */}
-      <div
-        className="relative w-full flex items-center justify-center"
-        style={{ flex: '0 0 20%', background: 'rgba(0,0,0,0.85)', borderTop: `1px solid ${C}15` }}
-      >
+      <div className="relative w-full flex items-center justify-center"
+        style={{ flex: '0 0 20%', background: 'rgba(0,0,0,0.85)', borderTop: `1px solid ${C}15` }}>
         {mode === 'LOCAL' ? (
-          /* Local mode — no PTZ, show label */
           <p style={{ color: `${G}25`, fontFamily: 'monospace', fontSize: '9px', letterSpacing: '0.2em' }}>
             PTZ · SOLO MODO CÁMARA IP
           </p>
         ) : (
-          /* REMOTE mode — joystick + zoom */
-          <div
-            className="flex items-center justify-center gap-6"
-            style={{
-              transition: 'opacity 0.3s',
-              opacity: ptz.visible ? 1 : 0.25,
-            }}
-          >
-            {/* D-pad */}
+          <div className="flex items-center justify-center gap-6" style={{ transition: 'opacity 0.3s', opacity: ptz.visible ? 1 : 0.25 }}>
             <div className="relative" style={{ width: 108, height: 108 }}>
-              {/* Up */}
               <div className="absolute" style={{ top: 0, left: '50%', transform: 'translateX(-50%)' }}>
                 <PtzBtn dir="up" icon={ChevronUp} />
               </div>
-              {/* Left */}
               <div className="absolute" style={{ top: '50%', left: 0, transform: 'translateY(-50%)' }}>
                 <PtzBtn dir="left" icon={ChevronLeft} />
               </div>
-              {/* Centre dot */}
-              <div
-                className="absolute"
-                style={{
-                  top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-                  width: 10, height: 10, borderRadius: '50%',
-                  background: `${C}30`, border: `1px solid ${C}50`,
-                }}
-              />
-              {/* Right */}
+              <div className="absolute"
+                style={{ top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+                  width: 10, height: 10, borderRadius: '50%', background: `${C}30`, border: `1px solid ${C}50` }} />
               <div className="absolute" style={{ top: '50%', right: 0, transform: 'translateY(-50%)' }}>
                 <PtzBtn dir="right" icon={ChevronRight} />
               </div>
-              {/* Down */}
               <div className="absolute" style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)' }}>
                 <PtzBtn dir="down" icon={ChevronDown} />
               </div>
             </div>
-
-            {/* Zoom column */}
             <div className="flex flex-col gap-2">
               <PtzBtn dir="zoom_in"  icon={ZoomIn}  />
               <div style={{ height: 1, background: `${C}20` }} />
