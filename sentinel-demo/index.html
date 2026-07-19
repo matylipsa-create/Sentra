@@ -14,6 +14,29 @@
     <div class="scanline"></div>
 
     <div id="app">
+        <div class="replay-bar" id="replay-bar" data-testid="replay-bar" hidden>
+            <div class="rp-left">
+                <span class="rp-badge">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    REPLAY
+                </span>
+                <span class="rp-id" id="rp-id" data-testid="replay-id">—</span>
+            </div>
+            <div class="rp-center">
+                <div class="rp-progress-track">
+                    <div class="rp-progress-fill" id="rp-progress-fill"></div>
+                </div>
+                <span class="rp-count" id="rp-count" data-testid="replay-count">0/0</span>
+            </div>
+            <div class="rp-controls">
+                <button class="rp-btn" id="rp-play" data-testid="replay-play-btn" title="Pausar / reanudar">Pausar</button>
+                <button class="rp-btn" id="rp-speed" data-testid="replay-speed-btn" title="Cambiar velocidad">1×</button>
+                <button class="rp-btn rp-btn--danger" id="rp-stop" data-testid="replay-stop-btn" title="Detener replay">Detener</button>
+            </div>
+        </div>
+
         <header>
             <div class="brand">
                 <div class="brand-mark">
@@ -116,6 +139,14 @@
                             </svg>
                             <span>SHARE</span>
                         </button>
+                        <button class="report-btn" id="import-btn" data-testid="import-json-btn" title="Importar sesión (JSON) o arrastra el archivo">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            <span>IMPORT</span>
+                        </button>
                     </div>
                 </div>
                 <div class="metrics-grid" id="metrics-grid"></div>
@@ -176,6 +207,18 @@
         </main>
     </div>
 
+    <div class="drop-overlay" id="drop-overlay" data-testid="drop-overlay" hidden>
+        <div class="drop-inner">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <h2>Suelta el reporte JSON</h2>
+            <p>Para hacer replay de la sesión</p>
+        </div>
+    </div>
+    <input type="file" id="import-input" accept="application/json,.json" hidden data-testid="import-input">
     <div class="toast" id="toast" data-testid="toast" hidden></div>
     <script src="app.js"></script>
 </body>

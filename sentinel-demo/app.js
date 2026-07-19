@@ -50,6 +50,24 @@ let simRunning = false;
 let simTimer = null;
 const SIM_EVENTS = ['fall', 'motion', 'emergency', 'observe'];
 
+// Replay
+let replayRunning = false;
+let replayPaused = false;
+let replayTimer = null;
+let replayIndex = 0;
+let replayEvents = [];
+let replaySessionId = '';
+const REPLAY_SPEEDS = [1, 2, 4, 0]; // 0 = instant
+let replaySpeedIdx = 0;
+const REPLAY_BASE_MS = 1500;
+
+const LABEL_TO_EVENT = {
+    'Caída detectada': 'fall',
+    'Movimiento sospechoso': 'motion',
+    'Emergencia': 'emergency',
+    'Observación pasiva': 'observe'
+};
+
 // --- DOM refs
 const displayEl = document.getElementById('mode-display');
 const descEl    = document.getElementById('mode-desc');
@@ -66,6 +84,16 @@ const metricsTotal = document.getElementById('metrics-total');
 const exportJsonBtn = document.getElementById('export-json');
 const exportPngBtn  = document.getElementById('export-png');
 const shareBtn      = document.getElementById('share-report');
+const importBtn     = document.getElementById('import-btn');
+const importInput   = document.getElementById('import-input');
+const dropOverlay   = document.getElementById('drop-overlay');
+const replayBar     = document.getElementById('replay-bar');
+const rpId          = document.getElementById('rp-id');
+const rpFill        = document.getElementById('rp-progress-fill');
+const rpCount       = document.getElementById('rp-count');
+const rpPlayBtn     = document.getElementById('rp-play');
+const rpSpeedBtn    = document.getElementById('rp-speed');
+const rpStopBtn     = document.getElementById('rp-stop');
 const simBtn        = document.getElementById('sim-toggle');
 const lifetimeBadge = document.getElementById('lifetime-badge');
 const lifetimeSummary = document.getElementById('lifetime-summary');
@@ -234,7 +262,8 @@ function pushEvent(eventType) {
         time: formatTime(new Date()),
         mode: state.label,
         label: cfg.label,
-        color: state.color
+        color: state.color,
+        event: eventType
     });
     if (history.length > 50) history.shift();
 

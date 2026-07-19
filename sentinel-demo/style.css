@@ -726,6 +726,159 @@ button[data-event][data-active="true"] {
     transform: translateX(-50%) translateY(0);
 }
 
+/* --- Drop overlay ------------------------------------------ */
+.drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(6, 8, 13, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: fadeInSoft 0.2s ease;
+}
+
+.drop-overlay[hidden] { display: none; }
+
+.drop-inner {
+    text-align: center;
+    padding: 60px 80px;
+    border: 2px dashed var(--accent);
+    border-radius: 20px;
+    background: rgba(0, 229, 255, 0.03);
+    color: var(--text);
+    box-shadow: 0 0 60px rgba(0, 229, 255, 0.2), inset 0 0 40px rgba(0, 229, 255, 0.05);
+    animation: dropPulse 1.6s ease-in-out infinite;
+}
+
+.drop-inner svg { color: var(--accent); margin-bottom: 12px; }
+.drop-inner h2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    letter-spacing: 3px;
+    margin: 0 0 6px;
+    color: var(--text);
+}
+.drop-inner p {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin: 0;
+    letter-spacing: 0.5px;
+}
+
+@keyframes dropPulse {
+    0%, 100% { transform: scale(1);    box-shadow: 0 0 60px rgba(0, 229, 255, 0.2), inset 0 0 40px rgba(0, 229, 255, 0.05); }
+    50%      { transform: scale(1.02); box-shadow: 0 0 80px rgba(0, 229, 255, 0.35), inset 0 0 60px rgba(0, 229, 255, 0.1); }
+}
+
+/* --- Replay bar -------------------------------------------- */
+.replay-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    margin-bottom: 22px;
+    background: linear-gradient(90deg, rgba(255, 107, 53, 0.08), rgba(255, 107, 53, 0.02));
+    border: 1px solid rgba(255, 107, 53, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(255, 107, 53, 0.1);
+    animation: fadeInSoft 0.3s ease;
+}
+
+.replay-bar[hidden] { display: none; }
+
+.rp-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 107, 53, 0.18);
+    border: 1px solid rgba(255, 107, 53, 0.4);
+    color: var(--soft-warn);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+}
+.rp-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rp-center { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rp-progress-track {
+    flex: 1;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    overflow: hidden;
+    min-width: 60px;
+}
+.rp-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--soft-warn), color-mix(in srgb, var(--soft-warn) 60%, transparent));
+    box-shadow: 0 0 8px var(--soft-warn);
+    border-radius: 999px;
+    transition: width 0.25s ease;
+}
+.rp-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    min-width: 44px;
+    text-align: right;
+}
+
+.rp-controls { display: flex; gap: 6px; }
+.rp-btn {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1.2px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    min-width: 32px;
+}
+.rp-btn:hover {
+    color: var(--soft-warn);
+    border-color: var(--soft-warn);
+    background: rgba(255, 107, 53, 0.08);
+}
+.rp-btn--danger:hover {
+    color: #ff5252;
+    border-color: #ff5252;
+    background: rgba(255, 82, 82, 0.1);
+}
+
+body[data-replay="on"] #demo-controls button[data-event] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+@media (max-width: 480px) {
+    .replay-bar { flex-wrap: wrap; }
+    .rp-center { order: 3; width: 100%; }
+    .drop-inner { padding: 40px 30px; }
+}
+
 @media (max-width: 480px) {
     .metrics-grid { grid-template-columns: 1fr; }
     .head-right { flex-direction: column-reverse; align-items: flex-end; gap: 6px; }
