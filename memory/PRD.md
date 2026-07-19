@@ -32,8 +32,13 @@ Construir el esqueleto de la demo de Sentinel (HTML/CSS/JS puro) en carpeta `sen
 - LIMPIAR → vuelve a ASSIST, log vacío ✔
 
 ## Backlog / P1
-- Sonido opcional por evento (WebAudio, sin assets)
-- Auto-return a ASSIST tras N segundos
 - Export/import del log (JSON)
-- Vista de estadísticas (conteo por modo)
 - Modo simulación (secuencia de eventos aleatorios)
+- Persistir métricas en localStorage entre sesiones
+
+## Iteración v0.2 (Feb 2026)
+- **Sonido WebAudio por evento**: síntesis con osciladores (sin assets); tonos distintos por evento (fall = alarma descendente square, motion = doble tono triangle, emergency = 3 tonos sawtooth alto, observe = sine grave, retorno automático = chime). Botón toggle `SFX` en el header.
+- **Auto-retorno a ASSIST tras timeout**: STABILIZE 6s, SOFT_WARN 10s, OBSERVE 8s. Chip visible junto al modo con countdown en vivo; regreso genera entrada "Retorno automático" en el log e incrementa métrica ASSIST.
+- **Panel de métricas por modo**: grid 2×2 con ASSIST/STABILIZE/SOFT_WARN/OBSERVE, contador y barra proporcional tintada por modo; header muestra "TOTAL n". Se resetea al pulsar LIMPIAR.
+- `data-testid` añadidos: `sound-toggle-btn`, `auto-return`, `metrics-panel`, `metrics-total`, `metric-{MODE}`, `metric-{MODE}-count`.
+- Verificado end-to-end: mode transitions, countdown visible, auto-return efectivo tras timeout, métricas correctas, toggle SFX cambia aria-pressed.

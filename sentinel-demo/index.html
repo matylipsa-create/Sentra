@@ -27,9 +27,24 @@
                     <p class="tagline">Soberanía Sobre tu Seguridad</p>
                 </div>
             </div>
-            <div class="sys-status" id="sys-status">
-                <span class="pulse-dot"></span>
-                <span class="sys-label">SYSTEM ONLINE</span>
+            <div class="head-right">
+                <button class="sound-toggle" id="sound-toggle" data-testid="sound-toggle-btn" aria-pressed="true" title="Activar/silenciar sonido">
+                    <svg class="ic ic-on" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                    </svg>
+                    <svg class="ic ic-off" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                        <line x1="23" y1="9" x2="17" y2="15"/>
+                        <line x1="17" y1="9" x2="23" y2="15"/>
+                    </svg>
+                    <span class="st-label">SFX</span>
+                </button>
+                <div class="sys-status" id="sys-status">
+                    <span class="pulse-dot"></span>
+                    <span class="sys-label">SYSTEM ONLINE</span>
+                </div>
             </div>
         </header>
 
@@ -44,6 +59,10 @@
                     <div class="mode-ring"></div>
                     <div id="mode-display" data-mode="ASSIST">ASSIST</div>
                     <div class="mode-desc" id="mode-desc">Sistema en asistencia activa</div>
+                    <div class="auto-return" id="auto-return" data-testid="auto-return" hidden>
+                        <span class="ar-label">// Auto-retorno a ASSIST en</span>
+                        <span class="ar-count" id="ar-count">8s</span>
+                    </div>
                 </div>
 
                 <div class="log-header">
@@ -53,6 +72,14 @@
                 <div id="event-log" class="event-log">
                     <div class="log-empty">Esperando eventos...</div>
                 </div>
+            </section>
+
+            <section id="metrics" class="metrics panel" data-testid="metrics-panel">
+                <div class="panel-header">
+                    <span class="panel-label">// MÉTRICAS POR MODO</span>
+                    <span class="metrics-total" id="metrics-total" data-testid="metrics-total">TOTAL 0</span>
+                </div>
+                <div class="metrics-grid" id="metrics-grid"></div>
             </section>
 
             <section id="demo-controls" class="controls">
