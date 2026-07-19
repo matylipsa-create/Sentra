@@ -32,9 +32,15 @@ Construir el esqueleto de la demo de Sentinel (HTML/CSS/JS puro) en carpeta `sen
 - LIMPIAR → vuelve a ASSIST, log vacío ✔
 
 ## Backlog / P1
-- Export/import del log (JSON)
-- Modo simulación (secuencia de eventos aleatorios)
+- Modo simulación (secuencia aleatoria de eventos)
 - Persistir métricas en localStorage entre sesiones
+- Compartir directo (Web Share API con el PNG)
+
+## Iteración v0.3 (Feb 2026) — Reporte de sesión descargable
+- **Export JSON** (`export-json-btn`): descarga `sentinel-report-{SESSION_ID}.json` con `session_id`, `generated_at`, `duration_sec`, `current_mode`, `metrics`, `total_events`, `history`.
+- **Export PNG** (`export-png-btn`): renderiza en canvas 1080×1350 (formato social) el reporte con branding, session id, duración, modo actual coloreado, total grande, barras por modo con degradado, últimos 8 eventos con stripe coloreada. Sin dependencias externas (canvas 2D nativo). Pre-carga fuentes JetBrains Mono + Space Grotesk antes de pintar.
+- Botones ubicados en el header del panel de MÉTRICAS junto al `TOTAL`.
+- Verificado: JSON 952B con estructura correcta y 5 eventos; PNG 849KB con reporte legible y compartible.
 
 ## Iteración v0.2 (Feb 2026)
 - **Sonido WebAudio por evento**: síntesis con osciladores (sin assets); tonos distintos por evento (fall = alarma descendente square, motion = doble tono triangle, emergency = 3 tonos sawtooth alto, observe = sine grave, retorno automático = chime). Botón toggle `SFX` en el header.

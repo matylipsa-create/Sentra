@@ -516,6 +516,47 @@ button[data-event][data-active="true"] {
     color: var(--text-dim);
 }
 
+.metrics-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.report-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s, transform 0.1s;
+}
+
+.report-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(0, 229, 255, 0.06);
+}
+
+.report-btn:active { transform: translateY(1px); }
+
+.report-btn--primary {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: rgba(0, 229, 255, 0.05);
+}
+
+.report-btn--primary:hover {
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.2), 0 4px 12px -6px rgba(0, 229, 255, 0.5);
+}
+
 .metrics-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
