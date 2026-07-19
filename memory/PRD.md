@@ -32,9 +32,21 @@ Construir el esqueleto de la demo de Sentinel (HTML/CSS/JS puro) en carpeta `sen
 - LIMPIAR → vuelve a ASSIST, log vacío ✔
 
 ## Backlog / P1
-- Modo simulación (secuencia aleatoria de eventos)
-- Persistir métricas en localStorage entre sesiones
-- Compartir directo (Web Share API con el PNG)
+- QR embebido en el PNG para tracking / captura de leads
+- Import de sesión (drag&drop del JSON) para hacer replay
+- Estadísticas globales (frecuencia por hora, secuencias más comunes)
+
+## Iteración v0.4 (Feb 2026) — Sim, Share, Lifetime
+- **Modo simulación** (`simulation-toggle-btn`): botón SIM en header con estado activo (glow naranja pulsante). Al activarse, `scheduleSimTick` dispara eventos aleatorios cada 1.4–3.8s desde `['fall','motion','emergency','observe']`. Toast confirma inicio/detención.
+- **Web Share API** (`share-report-btn`): genera PNG, lo envía como File vía `navigator.share({files:[file], text, title})`. Fallback multi-nivel: si `navigator.canShare` no soporta files → descarga PNG + copia resumen al portapapeles + toast informativo. Si el usuario aborta → sin acción.
+- **Persistencia lifetime** en `localStorage['sentinel_demo_v1']`: contador de sesiones, métricas históricas por modo, last_session_id. Se guarda tras cada evento y en reset. Badge `S{n} · Σ {total}` en header de métricas + sub-contador por métrica (`histórico N` en color tenue) + footer `Sesión #N · histórico M eventos en N sesiones` + botón `borrar histórico` (con confirm).
+- **LIMPIAR** ahora solo resetea la sesión actual (metrics + history + autoTimer + currentMode), preservando lifetime.
+- **Toast** flotante inferior para feedback (SIM iniciada/detenida, share, reset, errores).
+- **Reporte PNG/JSON** actualizados: incluyen `session_number`, `lifetime_metrics`, `lifetime_total`. El PNG ahora muestra "MÉTRICAS · SESIÓN #N (histórico total: M)" y en cada barra el count actual + `Σlifetime` a la derecha.
+- Bug fix: `loadLifetime()` no se llamaba en Boot (perdía sesiones anteriores), `<script>` se cargaba antes que `#toast` provocando null refs — ambos corregidos.
+
+## Data-testids nuevos
+`simulation-toggle-btn`, `share-report-btn`, `lifetime-badge`, `lifetime-summary`, `reset-lifetime-btn`, `metric-{MODE}-lifetime`, `toast`.
 
 ## Iteración v0.3 (Feb 2026) — Reporte de sesión descargable
 - **Export JSON** (`export-json-btn`): descarga `sentinel-report-{SESSION_ID}.json` con `session_id`, `generated_at`, `duration_sec`, `current_mode`, `metrics`, `total_events`, `history`.

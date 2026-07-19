@@ -28,6 +28,16 @@
                 </div>
             </div>
             <div class="head-right">
+                <button class="sound-toggle" id="sim-toggle" data-testid="simulation-toggle-btn" aria-pressed="false" title="Iniciar / detener simulación automática">
+                    <svg class="ic ic-on" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="5" width="4" height="14" rx="1"/>
+                        <rect x="14" y="5" width="4" height="14" rx="1"/>
+                    </svg>
+                    <svg class="ic ic-off" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="6 4 20 12 6 20 6 4"/>
+                    </svg>
+                    <span class="st-label">SIM</span>
+                </button>
                 <button class="sound-toggle" id="sound-toggle" data-testid="sound-toggle-btn" aria-pressed="true" title="Activar/silenciar sonido">
                     <svg class="ic ic-on" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -78,6 +88,7 @@
                 <div class="panel-header">
                     <span class="panel-label">// MÉTRICAS POR MODO</span>
                     <div class="metrics-actions">
+                        <span class="lifetime-badge" id="lifetime-badge" data-testid="lifetime-badge" title="Sesión actual · total histórico">S1 · Σ 0</span>
                         <span class="metrics-total" id="metrics-total" data-testid="metrics-total">TOTAL 0</span>
                         <button class="report-btn" id="export-json" data-testid="export-json-btn" title="Descargar reporte JSON">
                             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -87,7 +98,7 @@
                             </svg>
                             <span>JSON</span>
                         </button>
-                        <button class="report-btn report-btn--primary" id="export-png" data-testid="export-png-btn" title="Descargar reporte PNG">
+                        <button class="report-btn" id="export-png" data-testid="export-png-btn" title="Descargar reporte PNG">
                             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                                 <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -95,9 +106,23 @@
                             </svg>
                             <span>PNG</span>
                         </button>
+                        <button class="report-btn report-btn--primary" id="share-report" data-testid="share-report-btn" title="Compartir reporte">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="18" cy="5" r="3"/>
+                                <circle cx="6" cy="12" r="3"/>
+                                <circle cx="18" cy="19" r="3"/>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                            </svg>
+                            <span>SHARE</span>
+                        </button>
                     </div>
                 </div>
                 <div class="metrics-grid" id="metrics-grid"></div>
+                <div class="metrics-foot">
+                    <span id="lifetime-summary" data-testid="lifetime-summary">Sesión #1 · sin histórico</span>
+                    <button class="reset-life" id="reset-lifetime" data-testid="reset-lifetime-btn">borrar histórico</button>
+                </div>
             </section>
 
             <section id="demo-controls" class="controls">
@@ -151,6 +176,7 @@
         </main>
     </div>
 
+    <div class="toast" id="toast" data-testid="toast" hidden></div>
     <script src="app.js"></script>
 </body>
 </html>

@@ -41,6 +41,15 @@ let autoTimer = null;
 let autoRemaining = 0;
 let autoInterval = null;
 
+// Lifetime state (localStorage)
+const LS_KEY = 'sentinel_demo_v1';
+let lifetime = { session_count: 0, metrics: { ASSIST: 0, STABILIZE: 0, SOFT_WARN: 0, OBSERVE: 0 }, last_session_id: null };
+
+// Simulation
+let simRunning = false;
+let simTimer = null;
+const SIM_EVENTS = ['fall', 'motion', 'emergency', 'observe'];
+
 // --- DOM refs
 const displayEl = document.getElementById('mode-display');
 const descEl    = document.getElementById('mode-desc');
@@ -56,6 +65,12 @@ const metricsGrid  = document.getElementById('metrics-grid');
 const metricsTotal = document.getElementById('metrics-total');
 const exportJsonBtn = document.getElementById('export-json');
 const exportPngBtn  = document.getElementById('export-png');
+const shareBtn      = document.getElementById('share-report');
+const simBtn        = document.getElementById('sim-toggle');
+const lifetimeBadge = document.getElementById('lifetime-badge');
+const lifetimeSummary = document.getElementById('lifetime-summary');
+const resetLifeBtn  = document.getElementById('reset-lifetime');
+const toastEl       = document.getElementById('toast');
 
 // --- Helpers
 function pad(n) { return n.toString().padStart(2, '0'); }
@@ -133,11 +148,17 @@ function renderLog() {
 
 function renderMetrics() {
     const total = Object.values(metrics).reduce((a, b) => a + b, 0);
+    const lifetimeTotal = Object.values(lifetime.metrics).reduce((a, b) => a + b, 0);
     const max = Math.max(1, ...Object.values(metrics));
     metricsTotal.textContent = `TOTAL ${total}`;
+    lifetimeBadge.textContent = `S${lifetime.session_count} · Σ ${lifetimeTotal}`;
+    lifetimeSummary.textContent = lifetimeTotal === 0
+        ? `Sesión #${lifetime.session_count} · sin histórico`
+        : `Sesión #${lifetime.session_count} · histórico ${lifetimeTotal} evento${lifetimeTotal === 1 ? '' : 's'} en ${lifetime.session_count} sesión${lifetime.session_count === 1 ? '' : 'es'}`;
     metricsGrid.innerHTML = Object.entries(metrics).map(([mode, count]) => {
         const pct = Math.round((count / max) * 100);
         const color = states[mode].color;
+        const lifeCount = lifetime.metrics[mode] || 0;
         return `
             <div class="metric" data-testid="metric-${mode}" style="--m-color:${color}">
                 <div class="metric-head">
@@ -145,6 +166,10 @@ function renderMetrics() {
                     <span class="metric-count" data-testid="metric-${mode}-count">${count}</span>
                 </div>
                 <div class="metric-bar"><div class="metric-bar-fill" style="width:${pct}%"></div></div>
+                <div class="metric-life">
+                    <span>histórico</span>
+                    <span class="lv" data-testid="metric-${mode}-lifetime">${lifeCount}</span>
+                </div>
             </div>
         `;
     }).join('');
@@ -180,6 +205,8 @@ function returnToAssist() {
     applyModeStyles('ASSIST');
     buttons.forEach(b => b.dataset.active = 'false');
     metrics.ASSIST += 1;
+    lifetime.metrics.ASSIST += 1;
+    saveLifetime();
     renderMetrics();
     playSequence(soundMap.assist);
     history.push({
@@ -212,6 +239,8 @@ function pushEvent(eventType) {
     if (history.length > 50) history.shift();
 
     metrics[cfg.mode] = (metrics[cfg.mode] || 0) + 1;
+    lifetime.metrics[cfg.mode] = (lifetime.metrics[cfg.mode] || 0) + 1;
+    saveLifetime();
 
     renderLog();
     renderMetrics();
@@ -253,15 +282,19 @@ soundBtn.addEventListener('click', () => {
 function buildSessionData() {
     const now = new Date();
     const durationSec = Math.floor((Date.now() - bootTime) / 1000);
+    const lifetimeTotal = Object.values(lifetime.metrics).reduce((a, b) => a + b, 0);
     return {
         product: 'Sentinel',
-        version: 'demo_v0.2',
+        version: 'demo_v0.4',
         session_id: `SNT-${bootTime.toString(36).toUpperCase()}`,
+        session_number: lifetime.session_count,
         generated_at: now.toISOString(),
         duration_sec: durationSec,
         current_mode: currentMode,
         metrics,
         total_events: Object.values(metrics).reduce((a, b) => a + b, 0),
+        lifetime_metrics: { ...lifetime.metrics },
+        lifetime_total: lifetimeTotal,
         history
     };
 }
@@ -287,7 +320,7 @@ function exportJSON() {
     downloadBlob(blob, `sentinel-report-${data.session_id}.json`);
 }
 
-async function exportPNG() {
+async function exportPNG(returnBlob = false) {
     const data = buildSessionData();
 
     // Ensure custom fonts are loaded before painting to canvas
@@ -392,16 +425,17 @@ async function exportPNG() {
     ctx.textAlign = 'left';
 
     // Section label: metrics
-    sectionLabel(ctx, PAD, 460, '// MÉTRICAS POR MODO', mono);
+    sectionLabel(ctx, PAD, 460, `// MÉTRICAS · SESIÓN #${data.session_number} (histórico total: ${data.lifetime_total})`, mono);
 
     // Bars
     const modeOrder = ['ASSIST', 'STABILIZE', 'SOFT_WARN', 'OBSERVE'];
     const maxCount = Math.max(1, ...Object.values(data.metrics));
     let by = 500;
     const barX = PAD + 220;
-    const barW = W - PAD - barX - 90;
+    const barW = W - PAD - barX - 130;
     modeOrder.forEach(mode => {
         const count = data.metrics[mode] || 0;
+        const lifeC = data.lifetime_metrics[mode] || 0;
         const color = states[mode].color;
         const pct = count / maxCount;
 
@@ -421,11 +455,16 @@ async function exportPNG() {
         const fillW = Math.max(pct * barW, count ? 12 : 0);
         roundRect(ctx, barX, by + 4, fillW, 28, 14); ctx.fill();
 
-        // Count
+        // Count (session)
         ctx.fillStyle = '#dfe4ee';
         ctx.font = `700 28px ${mono}`;
         ctx.textAlign = 'right';
-        ctx.fillText(String(count), W - PAD, by + 26);
+        ctx.fillText(String(count), W - PAD - 60, by + 26);
+
+        // Lifetime count (secondary)
+        ctx.fillStyle = hexAlpha(color, 0.75);
+        ctx.font = `500 18px ${mono}`;
+        ctx.fillText(`Σ${lifeC}`, W - PAD, by + 26);
         ctx.textAlign = 'left';
 
         by += 72;
@@ -481,9 +520,10 @@ async function exportPNG() {
     ctx.textAlign = 'left';
 
     // Export
-    await new Promise(resolve => canvas.toBlob(blob => {
+    return await new Promise(resolve => canvas.toBlob(blob => {
+        if (returnBlob) { resolve({ blob, data }); return; }
         downloadBlob(blob, `sentinel-report-${data.session_id}.png`);
-        resolve();
+        resolve({ blob, data });
     }, 'image/png'));
 }
 
@@ -524,7 +564,128 @@ function hexAlpha(hex, a) {
 exportJsonBtn.addEventListener('click', exportJSON);
 exportPngBtn.addEventListener('click', () => { exportPNG(); });
 
+// --- Lifetime (localStorage) -------------------------------
+function loadLifetime() {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                lifetime.session_count = parsed.session_count || 0;
+                Object.keys(lifetime.metrics).forEach(k => {
+                    lifetime.metrics[k] = (parsed.metrics && parsed.metrics[k]) || 0;
+                });
+                lifetime.last_session_id = parsed.last_session_id || null;
+            }
+        }
+    } catch (e) { /* ignore corrupted */ }
+    lifetime.session_count += 1;
+    lifetime.last_session_id = `SNT-${bootTime.toString(36).toUpperCase()}`;
+    saveLifetime();
+}
+
+function saveLifetime() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(lifetime)); } catch (e) { /* quota / private mode */ }
+}
+
+function resetLifetime() {
+    lifetime.session_count = 1;
+    lifetime.metrics = { ASSIST: 0, STABILIZE: 0, SOFT_WARN: 0, OBSERVE: 0 };
+    lifetime.last_session_id = `SNT-${bootTime.toString(36).toUpperCase()}`;
+    saveLifetime();
+    renderMetrics();
+    showToast('Histórico borrado');
+}
+
+// --- Toast ---------------------------------------------------
+let toastTimer = null;
+function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    // reflow to allow transition
+    void toastEl.offsetWidth;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toastEl.classList.remove('show');
+        setTimeout(() => { toastEl.hidden = true; }, 260);
+    }, 2200);
+}
+
+// --- Simulation ---------------------------------------------
+function scheduleSimTick() {
+    const delay = 1400 + Math.random() * 2400; // 1.4s – 3.8s
+    simTimer = setTimeout(() => {
+        if (!simRunning) return;
+        const ev = SIM_EVENTS[Math.floor(Math.random() * SIM_EVENTS.length)];
+        ensureAudio();
+        pushEvent(ev);
+        scheduleSimTick();
+    }, delay);
+}
+
+function startSim() {
+    if (simRunning) return;
+    simRunning = true;
+    simBtn.setAttribute('aria-pressed', 'true');
+    ensureAudio();
+    showToast('Simulación iniciada · Ctrl-clic SIM para detener');
+    scheduleSimTick();
+}
+
+function stopSim() {
+    if (!simRunning) return;
+    simRunning = false;
+    simBtn.setAttribute('aria-pressed', 'false');
+    if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+    showToast('Simulación detenida');
+}
+
+simBtn.addEventListener('click', () => (simRunning ? stopSim() : startSim()));
+
+// --- Share --------------------------------------------------
+async function shareReport() {
+    showToast('Generando reporte...');
+    let result;
+    try { result = await exportPNG(true); } catch (e) { showToast('Error generando PNG'); return; }
+    const { blob, data } = result;
+    const filename = `sentinel-report-${data.session_id}.png`;
+    const file = new File([blob], filename, { type: 'image/png' });
+    const text = `Sentinel · Sesión ${data.session_id} · ${data.total_events} eventos en ${fmtDur(data.duration_sec)} (histórico ${data.lifetime_total})`;
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: 'Reporte Sentinel',
+                text
+            });
+            showToast('Compartido');
+            return;
+        } catch (e) {
+            // user aborted or share failed — fall through to fallback
+            if (e && e.name === 'AbortError') return;
+        }
+    }
+    // Fallback: download PNG + copy summary text
+    downloadBlob(blob, filename);
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('PNG descargado · resumen copiado al portapapeles');
+    } catch {
+        showToast('PNG descargado (Web Share no disponible)');
+    }
+}
+
+shareBtn.addEventListener('click', shareReport);
+
+// --- Reset lifetime ----------------------------------------
+resetLifeBtn.addEventListener('click', () => {
+    if (confirm('¿Borrar el histórico acumulado en este navegador?')) resetLifetime();
+});
+
 // --- Boot
+loadLifetime();
 applyModeStyles('ASSIST');
 renderLog();
 renderMetrics();
