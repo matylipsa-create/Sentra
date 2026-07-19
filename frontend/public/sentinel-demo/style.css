@@ -1,0 +1,447 @@
+/* ==========================================================
+   Sentinel — Demo
+   Cyber HUD aesthetic. Dark base, cyan accents, mode-tinted glow.
+   ========================================================== */
+
+:root {
+    --bg-0: #06080d;
+    --bg-1: #0a0c12;
+    --bg-2: #0d1119;
+    --panel: #10141d;
+    --panel-2: #131826;
+    --border: #1e2536;
+    --border-strong: #2a3346;
+    --text: #dfe4ee;
+    --text-dim: #7a8399;
+    --text-faint: #4a5266;
+    --accent: #00e5ff;
+
+    /* Mode colors */
+    --assist: #00e676;
+    --stabilize: #ffb300;
+    --soft-warn: #ff6b35;
+    --observe: #6b7fd7;
+
+    --mode-color: var(--assist);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-0);
+    color: var(--text);
+    font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* --- Background layers -------------------------------------- */
+.grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse at 50% 40%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 40%, black 30%, transparent 75%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.scanline {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.015) 0,
+        rgba(255, 255, 255, 0.015) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: overlay;
+}
+
+/* --- App layout --------------------------------------------- */
+#app {
+    position: relative;
+    z-index: 2;
+    max-width: 560px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 40px 22px 60px;
+}
+
+/* --- Header ------------------------------------------------- */
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-mark {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(140deg, rgba(0, 229, 255, 0.15), rgba(0, 229, 255, 0.02));
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    box-shadow: 0 0 24px rgba(0, 229, 255, 0.15);
+}
+
+h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.6rem;
+    letter-spacing: 4px;
+    margin: 0;
+    color: var(--text);
+    font-weight: 700;
+}
+
+.tagline {
+    margin: 2px 0 0;
+    font-size: 0.72rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+.sys-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.02);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+}
+
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--assist);
+    box-shadow: 0 0 12px var(--assist);
+    animation: pulseDot 1.6s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* --- Panel -------------------------------------------------- */
+.panel {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 22px 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.panel::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--mode-color), transparent);
+    opacity: 0.6;
+    transition: background 0.4s ease;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.panel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 2px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+}
+
+.uptime {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+}
+
+/* --- Mode display ------------------------------------------- */
+.mode-wrap {
+    position: relative;
+    padding: 34px 20px 26px;
+    text-align: center;
+    border-radius: 14px;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.02) 0%, transparent 70%);
+    margin-bottom: 26px;
+    overflow: hidden;
+}
+
+.mode-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 220px;
+    height: 220px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px solid var(--mode-color);
+    opacity: 0.18;
+    pointer-events: none;
+    transition: border-color 0.4s ease;
+    animation: ringPulse 3s ease-in-out infinite;
+}
+
+.mode-ring::before,
+.mode-ring::after {
+    content: "";
+    position: absolute;
+    inset: -18px;
+    border-radius: 50%;
+    border: 1px solid var(--mode-color);
+    opacity: 0.5;
+}
+
+.mode-ring::after {
+    inset: -40px;
+    opacity: 0.25;
+}
+
+@keyframes ringPulse {
+    0%, 100% { opacity: 0.18; }
+    50% { opacity: 0.32; }
+}
+
+#mode-display {
+    position: relative;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--mode-color);
+    text-shadow: 0 0 24px color-mix(in srgb, var(--mode-color) 55%, transparent);
+    transition: color 0.4s ease, text-shadow 0.4s ease;
+    animation: modeIn 0.5s ease;
+}
+
+@keyframes modeIn {
+    from { opacity: 0; transform: translateY(6px); letter-spacing: 8px; }
+    to { opacity: 1; transform: translateY(0); letter-spacing: 4px; }
+}
+
+.mode-desc {
+    margin-top: 10px;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    position: relative;
+}
+
+/* --- Event log --------------------------------------------- */
+.log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.clear-btn {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.clear-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(0, 229, 255, 0.06);
+}
+
+.event-log {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    max-height: 168px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+
+.event-log::-webkit-scrollbar { width: 6px; }
+.event-log::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+.log-empty {
+    color: var(--text-faint);
+    font-style: italic;
+    padding: 6px 2px;
+}
+
+.log-entry {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 6px 4px;
+    border-left: 2px solid var(--mode-color);
+    padding-left: 10px;
+    background: rgba(255, 255, 255, 0.015);
+    border-radius: 0 4px 4px 0;
+    animation: logIn 0.35s ease;
+}
+
+@keyframes logIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.log-time {
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.log-mode {
+    font-weight: 700;
+    color: var(--entry-color, var(--text));
+}
+
+.log-text {
+    color: var(--text);
+    flex: 1;
+}
+
+/* --- Controls ---------------------------------------------- */
+.controls {
+    margin-top: 22px;
+}
+
+.controls-label {
+    display: block;
+    margin-bottom: 10px;
+    padding-left: 4px;
+}
+
+.button-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+button[data-event] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.86rem;
+    font-weight: 500;
+    text-align: left;
+    transition: transform 0.12s ease, border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+button[data-event]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(0, 229, 255, 0.08) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform 0.5s ease;
+    pointer-events: none;
+}
+
+button[data-event]:hover {
+    border-color: var(--accent);
+    background: var(--panel-2);
+    box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.15), 0 8px 24px -12px rgba(0, 229, 255, 0.4);
+}
+
+button[data-event]:hover::after {
+    transform: translateX(100%);
+}
+
+button[data-event]:active { transform: translateY(1px); }
+
+button[data-event][data-active="true"] {
+    border-color: var(--mode-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--mode-color) 40%, transparent),
+                0 8px 24px -12px color-mix(in srgb, var(--mode-color) 60%, transparent);
+}
+
+.btn-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(0, 229, 255, 0.06);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.btn-text { flex: 1; }
+
+/* --- Footer ------------------------------------------------ */
+.foot {
+    margin-top: 26px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 1.5px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+}
+
+.foot-sep { margin: 0 8px; opacity: 0.5; }
+
+/* --- Responsive -------------------------------------------- */
+@media (max-width: 480px) {
+    #app { padding: 24px 14px 40px; }
+    header { flex-direction: column; align-items: flex-start; }
+    h1 { font-size: 1.35rem; letter-spacing: 3px; }
+    #mode-display { font-size: 1.9rem; letter-spacing: 3px; }
+    .button-grid { grid-template-columns: 1fr; }
+    .mode-ring { width: 180px; height: 180px; }
+}
