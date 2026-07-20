@@ -1,6 +1,8 @@
 import type { BiometricData } from './bluetooth';
 import { supabase } from './supabase';
 import { sendTelemetry } from './telemetryFilter';
+import { mesh } from './SentraMesh';
+import { computeConfidence } from './eventConfidence';
 
 // ── Diff #6: caché local del user id para evitar `getUser()` en cada alerta ──
 // Se inicializa al cargar el módulo y se refresca en cada cambio de sesión.
@@ -85,6 +87,8 @@ class SensorPipeline {
     reading.processed = true;
 
     if (alerts.length > 0) {
+      const confidence = computeConfidence('AUDIO_ALERT', { alerta: alerts.join(',') });
+      void mesh.emit('AUDIO_ALERT', { alerta: `Biométrico: ${alerts.join(', ')}`, confidence });
       this.persistAlert(reading, alerts);
     }
 

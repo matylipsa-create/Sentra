@@ -1,5 +1,5 @@
 export type AgentName = 'Anchor' | 'Daemon' | 'Observer';
-export type DaemonMode = 'ASSIST' | 'STABILIZE' | 'OBSERVE';
+export type DaemonMode = 'ASSIST' | 'STABILIZE' | 'SOFT_WARN' | 'OBSERVE';
 export type AgentStatus = 'calm' | 'alert' | 'active' | 'idle';
 export type Severity = 'info' | 'warning' | 'critical';
 export type NavTab = 'dashboard' | 'regulation' | 'operations' | 'settings';

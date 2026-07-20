@@ -363,17 +363,19 @@ export default function SentraHUD() {
   useEffect(() => {
     const unsubs = [
       mesh.on('VISION_ALERT', (e) => {
-        const { label, confidence } = e.payload as { label: string; confidence: number };
-        setPhase('ALERT');
+        const { label, confidence = 0.5 } = e.payload as { label: string; confidence?: number };
         addLog(`👁️ VISIÓN: ${label.toUpperCase()} detectado — ${(confidence * 100).toFixed(0)}% confianza`, 'crit');
+        toast({ title: 'Visión: ' + label.toUpperCase(), message: `Confianza ${(confidence * 100).toFixed(0)}%`, variant: 'warning' });
         triggerHaptic([200, 100, 200, 100, 400]);
         setLastDetection({ label, confidence, timestamp: new Date(), eventId: ++eventIdRef.current });
+        if (isHighConfidence(confidence)) setPhase('ALERT');
       }),
       mesh.on('SPEECH_COERCION', (e) => {
-        const { isSilentTrigger } = e.payload as { isSilentTrigger: boolean };
-        setPhase('CODE_RED');
+        const { isSilentTrigger, confidence = 0.9 } = e.payload as { isSilentTrigger?: boolean; confidence?: number };
         addLog(isSilentTrigger ? '🚨 IA: CÓDIGO ROJO SILENCIOSO — protocolo activo' : '⚠️ IA: Coacción detectada', 'crit');
+        toast({ title: isSilentTrigger ? 'CÓDIGO ROJO SILENCIOSO' : 'Coacción detectada', message: 'Protocolo activo', variant: 'critical' });
         triggerHaptic([500, 200, 500, 200, 1000]);
+        if (isHighConfidence(confidence)) setPhase('CODE_RED');
       }),
       mesh.on('EMERGENCY_DISPATCH', () => {
         addLog('📡 DISPATCH → Pipedream OK · Telegram notificado', 'net');
@@ -384,23 +386,26 @@ export default function SentraHUD() {
         if (armed) addLog(`📍 GEO: ${geo.address}`, 'net');
       }),
       mesh.on('AUDIO_ALERT', (e) => {
-        const { alerta } = e.payload as { alerta: string };
+        const { alerta, confidence = 0.5 } = e.payload as { alerta: string; confidence?: number };
         addLog(`🔴 AUDIO: ${alerta}`, 'crit');
-        setPhase((p) => (p === 'ARMED' ? 'ALERT' : p));
+        toast({ title: 'Audio: ' + alerta, variant: 'warning' });
         triggerHaptic([150, 80, 150]);
+        if (isHighConfidence(confidence)) setPhase((p) => (p === 'ARMED' ? 'ALERT' : p));
       }),
       // Fase 2 — palabras clave detectadas por el worker sentraIA.
       // Reemplaza la ruta AudioEngine.startSpeech → emitAlert('PALABRA CLAVE: ...').
       mesh.on('KEYWORD_DETECTED', (e) => {
-        const { keyword } = e.payload as { keyword: string };
+        const { keyword, confidence = 0.9 } = e.payload as { keyword: string; confidence?: number };
         addLog(`🎙️ IA: PALABRA CLAVE — ${keyword.toUpperCase()}`, 'crit');
-        setPhase((p) => (p === 'ARMED' ? 'ALERT' : p));
+        toast({ title: 'Palabra clave: ' + keyword.toUpperCase(), variant: 'critical' });
         triggerHaptic([150, 80, 150]);
+        if (isHighConfidence(confidence)) setPhase((p) => (p === 'ARMED' ? 'ALERT' : p));
       }),
       mesh.on('FALLBACK_QUEUED',  () => addLog('💾 IDB: Evento encolado en FIFO', 'warn')),
       mesh.on('FALLBACK_FLUSHED', (e) => {
         const { count } = e.payload as { count: number };
         addLog(`✅ IDB: ${count} evento(s) sincronizados desde cola`, 'ok');
+        toast({ title: 'IDB sincronizado', message: `${count} evento(s)`, variant: 'success' });
       }),
       mesh.on('CAMERA_PERMISSION_DENIED', (e) => {
         const { message } = e.payload as { message: string };
@@ -408,8 +413,7 @@ export default function SentraHUD() {
       }),
       // ── MDAO events ──────────────────────────────────────────────────────
       mesh.on('ADVERSARIAL_GARMENT', (e) => {
-        const { label, confidence } = e.payload as { label: string; confidence: number };
-        setPhase('ALERT');
+        const { label, confidence = 0.5 } = e.payload as { label: string; confidence?: number };
         addLog(`⚠️ MDAO-A: PRENDA ADVERSARIA — ${label.toUpperCase()} (${((confidence ?? 0) * 100).toFixed(0)}%)`, 'crit');
         triggerHaptic([300, 100, 300]);
         setLastDetection({
@@ -418,6 +422,7 @@ export default function SentraHUD() {
           timestamp:  new Date(),
           eventId:    ++eventIdRef.current,
         });
+        if (isHighConfidence(confidence)) setPhase('ALERT');
       }),
       mesh.on('FACE_DENSITY', (e) => {
         const { count } = e.payload as { count: number };

@@ -8,6 +8,7 @@ import {
   CACHE_PURGE_AGE_MS,
 } from '../config';
 import { batchDispatcher } from './batchDispatcher';
+import { computeConfidence } from './eventConfidence';
 
 const TELEGRAM_ID_KEY = 'sentra_telegram_chat_id';
 const PIPEDREAM_KEY   = 'sentra_pipedream_url';
@@ -85,6 +86,10 @@ class SentraMesh {
       },
     });
     this.flushLoop();
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => void this.flushNow());
+    }
   }
 
   on(type: MeshEventType, handler: Handler): () => void {
@@ -105,9 +110,12 @@ class SentraMesh {
    * flushLoop provides the retry safety-net for any failed dispatches from the batch.
    */
   async emit(type: MeshEventType, payload: unknown): Promise<void> {
+    const confidence = computeConfidence(type, payload);
+    const stamped = { ...(payload as object), confidence };
+
     const event: MeshEvent = {
       type,
-      payload,
+      payload: stamped,
       timestamp: Date.now(),
       sent: false,
       retries: 0,
@@ -127,7 +135,7 @@ class SentraMesh {
     }
 
     // Route through batch dispatcher; returns false when debounced.
-    batchDispatcher.enqueue(type, payload, idbId);
+    batchDispatcher.enqueue(type, stamped, idbId);
   }
 
   // Direct Cerebro dispatch — used only by flushLoop for IDB retries
@@ -202,38 +210,39 @@ class SentraMesh {
   }
 
   private async flushLoop(): Promise<void> {
-    const flush = async () => {
-      if (!this.db || !navigator.onLine) return;
-      const unsent = await this.db.getAllFromIndex(STORE, 'sent', IDBKeyRange.only(false));
-      let flushed = 0;
-      for (const event of unsent) {
-        if (event.retries >= MAX_RETRIES) continue;
-        const ok = await this.dispatchToCerebro(
-          {
-            event_type:     event.type,
-            timestamp:      event.timestamp,
-            channel_id:     getRuntimeConfig().channelId,
-            data:           event.payload,
-            sentra_version: '3.0',
-          },
-          event
-        );
-        if (ok) flushed++;
-      }
-      if (flushed > 0) {
-        this.notify({
-          type:      'FALLBACK_FLUSHED',
-          payload:   { count: flushed },
-          timestamp: Date.now(),
-          sent:      true,
-          retries:   0,
-        });
-      }
-      await this.purgeOld();
-    };
-
+    const flush = async () => { void this.flushNow(); };
     setInterval(flush, FLUSH_INTERVAL_MS);
-    await flush();
+    await this.flushNow();
+  }
+
+  private async flushNow(): Promise<void> {
+    if (!this.db || !navigator.onLine) return;
+    const unsent = await this.db.getAllFromIndex(STORE, 'sent', IDBKeyRange.only(false));
+    let flushed = 0;
+    for (const event of unsent) {
+      if (event.retries >= MAX_RETRIES) continue;
+      const ok = await this.dispatchToCerebro(
+        {
+          event_type:     event.type,
+          timestamp:      event.timestamp,
+          channel_id:     getRuntimeConfig().channelId,
+          data:           event.payload,
+          sentra_version: '3.0',
+        },
+        event
+      );
+      if (ok) flushed++;
+    }
+    if (flushed > 0) {
+      this.notify({
+        type:      'FALLBACK_FLUSHED',
+        payload:   { count: flushed },
+        timestamp: Date.now(),
+        sent:      true,
+        retries:   0,
+      });
+    }
+    await this.purgeOld();
   }
 
   private async purgeOld(): Promise<void> {

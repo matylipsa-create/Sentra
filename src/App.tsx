@@ -1,10 +1,12 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { ToastProvider } from './context/ToastContext';
 import SentraAuth from './components/SentraAuth';
 import type { SentraUser } from './components/SentraAuth';
 import TopBar from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import EmergencyDrawer from './components/EmergencyDrawer';
+import PanicOverlay from './components/PanicOverlay';
 import Dashboard from './pages/Dashboard';
 import Regulation from './pages/Regulation';
 import Operations from './pages/Operations';
@@ -80,6 +82,7 @@ function AppShell() {
 
       <BottomNav />
       <EmergencyDrawer />
+      <PanicOverlay />
     </div>
   );
 }
@@ -103,8 +106,10 @@ export default function App() {
   }
 
   return (
-    <AppProvider>
-      <AppShell />
-    </AppProvider>
+    <ToastProvider>
+      <AppProvider>
+        <AppShell />
+      </AppProvider>
+    </ToastProvider>
   );
 }
