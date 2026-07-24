@@ -70,6 +70,7 @@ export function useDemoEventGenerator() {
       modo: cfg.label.split(':')[0].toUpperCase(),
       descripcion,
       confianza: randomConfidence(),
+      simulated: true,
     };
 
     addHistoryEvent(ev);
@@ -83,6 +84,7 @@ export function useDemoEventGenerator() {
     setDemoActive((prev) => {
       const next = !prev;
       try { localStorage.setItem(DEMO_KEY, String(next)); } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent('sentra_demo_toggle', { detail: { active: next } }));
       return next;
     });
   }, []);

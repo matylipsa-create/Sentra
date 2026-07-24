@@ -15,6 +15,7 @@ export interface SentraHistoryEvent {
   modo: string;
   descripcion: string;
   confianza: string;
+  simulated?: boolean;
 }
 
 const SOURCES_KEY = 'sentra_sources';
