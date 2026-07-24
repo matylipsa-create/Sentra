@@ -139,9 +139,7 @@ export default function App() {
 
   const handleAuth = (authenticatedUser: SentraUser) => {
     if (authenticatedUser.method === 'BIOMETRIC' || WHITELIST.includes(authenticatedUser.email ?? '')) {
-      console.log('[App] Auth OK — setUser(authenticatedUser)', { uid: authenticatedUser.uid, method: authenticatedUser.method });
       setUser(authenticatedUser);
-      console.log('[App] setUser llamado — user ahora es:', authenticatedUser.email);
     } else {
       console.error('Acceso Denegado: Usuario no autorizado —', authenticatedUser.email);
       alert('Acceso Denegado');
@@ -149,11 +147,9 @@ export default function App() {
   };
 
   if (!user) {
-    console.log('[App] Render — user=null, mostrando SentraAuth');
     return <SentraAuth onAuthenticated={handleAuth} />;
   }
 
-  console.log('[App] Render — user autenticado, mostrando AppShell');
   return (
     <ToastProvider>
       <AppProvider>

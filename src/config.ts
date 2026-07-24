@@ -9,7 +9,7 @@
 // El TELEGRAM_BOT_TOKEN NUNCA vive en el cliente (auditoría 2026-01).
 
 // ── Pipedream endpoints ─────────────────────────────────────────────────────
-export const PIPEDREAM_ENDPOINT            = 'https://pepas2006.app.n8n.cloud/webhook/sentra-alert';
+export const PIPEDREAM_ENDPOINT            = 'https://eoqv1v7e0297v4p.m.pipedream.net';
 export const PIPEDREAM_TELEMETRY_ENDPOINT  = 'https://eoiypa957c7ukph.m.pipedream.net';
 export const TELEGRAM_CHANNEL_ID           = '-1003914032579';
 

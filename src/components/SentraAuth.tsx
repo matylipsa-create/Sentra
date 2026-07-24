@@ -111,7 +111,6 @@ export default function SentraAuth({ onAuthenticated }: Props) {
         photoURL:    gu?.photoURL    ?? null,
         method:      'BIOMETRIC',
       };
-      console.log('[SentraAuth] Autenticación exitosa — llamando onAuthenticated', { uid: user.uid, method: user.method });
       await mesh.emit('SYSTEM_ARMED' as any, { method: 'BIOMETRIC', uid: user.uid, ts: Date.now() });
       onAuthenticated(user);
     } catch (e) {

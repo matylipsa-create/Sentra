@@ -14,7 +14,7 @@
  */
 import axios from 'axios';
 
-const PIPEDREAM_WEBHOOK = 'https://pepas2006.app.n8n.cloud/webhook/sentra-alert';
+const PIPEDREAM_WEBHOOK = 'https://eo4xot0qo22mfqm.m.pipedream.net';
 
 export interface EmergencyPayload {
   camera_sector: string;

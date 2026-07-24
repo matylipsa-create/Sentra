@@ -10,7 +10,6 @@ import { useTacticalDashboard } from '../hooks/useTacticalDashboard';
 import { useDemoMode } from '../hooks/useDemoMode';
 import { useSpeechBridge } from '../hooks/useSpeechBridge';
 import { useApp } from '../context/AppContext';
-import { useToast } from '../context/ToastContext';
 import { mesh } from '../lib/SentraMesh';
 import AudioEngine from './AudioEngine';
 import type { AudioAlertLog } from './AudioEngine';
@@ -284,7 +283,6 @@ function EvidenceCard({ detection, address }: { detection: Detection; address: s
 export default function SentraHUD() {
   const { geo, diag, arm, disarm, triggerHaptic, pendingMessages, rtt } = useSentraCore();
   const { state, setArmed: setGlobalArmed } = useApp();
-  const { toast } = useToast();
   const { metrics, stressAlert } = useTacticalDashboard();
   const demoMode = useDemoMode();
 
