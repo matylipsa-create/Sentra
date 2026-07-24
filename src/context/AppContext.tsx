@@ -98,7 +98,7 @@ interface AppContextValue {
   setArmed: (armed: boolean) => void;
 }
 
-export const AppContext = createContext<AppContextValue | null>(null);
+const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);

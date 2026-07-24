@@ -4,6 +4,7 @@ import { addHistoryEvent, type SentraHistoryEvent } from './useSeedData';
 
 const DEMO_KEY = 'sentra_demo_mode';
 const DEMO_INTERVAL_MS = 8_000;
+const MAX_EVENTS = 20;
 
 type DemoEventType = 'vision' | 'audio' | 'keyword' | 'movement' | 'fall' | 'eme';
 
@@ -70,7 +71,6 @@ export function useDemoEventGenerator() {
       modo: cfg.label.split(':')[0].toUpperCase(),
       descripcion,
       confianza: randomConfidence(),
-      simulated: true,
     };
 
     addHistoryEvent(ev);
@@ -84,7 +84,6 @@ export function useDemoEventGenerator() {
     setDemoActive((prev) => {
       const next = !prev;
       try { localStorage.setItem(DEMO_KEY, String(next)); } catch { /* ignore */ }
-      window.dispatchEvent(new CustomEvent('sentra_demo_toggle', { detail: { active: next } }));
       return next;
     });
   }, []);

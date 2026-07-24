@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { mesh, type MeshEventType } from '../lib/SentraMesh';
+import { mesh } from '../lib/SentraMesh';
 import { useToast } from '../context/ToastContext';
 
 const SIM_KEY = 'sentra_simulation';
 
-const EVENTS: { type: MeshEventType; payload: Record<string, unknown>; title: string; variant: 'info' | 'success' | 'warning' | 'critical' }[] = [
-  { type: 'VISION_ALERT',       payload: { label: 'person', confidence: 0.91 }, title: 'Visión: Persona detectada', variant: 'warning' },
-  { type: 'AUDIO_ALERT',        payload: { alerta: 'Sonido inusual detectado' }, title: 'Audio: Alerta acústica', variant: 'warning' },
-  { type: 'KEYWORD_DETECTED',   payload: { keyword: 'auxilio' },                 title: 'IA: Palabra clave detectada', variant: 'critical' },
-  { type: 'FACE_DENSITY',       payload: { count: 4 },                           title: 'MDAO-B: Densidad facial', variant: 'info' },
-  { type: 'FALLBACK_QUEUED',    payload: { reason: 'SIM', count: 1 },             title: 'IDB: Evento encolado', variant: 'info' },
-  { type: 'FALLBACK_FLUSHED',   payload: { count: 1, latency_ms: 80 },            title: 'IDB: Cola sincronizada', variant: 'success' },
+const EVENTS = [
+  { type: 'VISION_ALERT',       payload: { label: 'person', confidence: 0.91 }, title: 'Visión: Persona detectada', variant: 'warning' as const },
+  { type: 'AUDIO_ALERT',        payload: { alerta: 'Sonido inusual detectado' }, title: 'Audio: Alerta acústica', variant: 'warning' as const },
+  { type: 'KEYWORD_DETECTED',   payload: { keyword: 'auxilio' },                 title: 'IA: Palabra clave detectada', variant: 'critical' as const },
+  { type: 'FACE_DENSITY',       payload: { count: 4 },                           title: 'MDAO-B: Densidad facial', variant: 'info' as const },
+  { type: 'FALLBACK_QUEUED',    payload: { reason: 'SIM', count: 1 },             title: 'IDB: Evento encolado', variant: 'info' as const },
+  { type: 'FALLBACK_FLUSHED',   payload: { count: 1, latency_ms: 80 },            title: 'IDB: Cola sincronizada', variant: 'success' as const },
 ];
 
 const INTERVAL_MS = 6000;

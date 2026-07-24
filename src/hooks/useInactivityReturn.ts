@@ -45,17 +45,16 @@ export function useInactivityReturn(
             countdownRef.current = null;
           }
           setCountdownActive(false);
-          console.log(`[SENTRA] Auto-retorno ejecutado — ${new Date().toISOString()} — modo anterior: ${currentMode}`);
           onReturnRef.current();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  }, [currentMode]);
+  }, []);
 
   useEffect(() => {
-    if (currentMode === 'OBSERVE') return;
+    if (currentMode === 'EMERGENCY' || currentMode === 'OBSERVE') return;
 
     const checkInactivity = () => {
       const elapsed = Date.now() - lastActivityRef.current;

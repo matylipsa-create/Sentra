@@ -9,14 +9,15 @@ import TopBar from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import EmergencyDrawer from './components/EmergencyDrawer';
 import PanicOverlay from './components/PanicOverlay';
-import ErrorBoundary from './components/ErrorBoundary';
-import DebugOverlay from './components/DebugOverlay';
 import Dashboard from './pages/Dashboard';
 import Regulation from './pages/Regulation';
 import Operations from './pages/Operations';
 import Settings from './pages/Settings';
 import type { NavTab } from './types';
 
+// All four pages are mounted once and toggled with display:none.
+// This prevents remounting heavy components (SentraHUD, workers, TF model)
+// on every tab switch, eliminating re-initialization costs entirely.
 function PageContent() {
   const { state } = useApp();
   const tab = state.activeTab;
@@ -29,15 +30,22 @@ function PageContent() {
 
   return (
     <>
+      {/* Dashboard — AMOLED black, no padding */}
       <div style={{ ...full('dashboard'), background: '#000000' }}>
         <Dashboard />
       </div>
+
+      {/* Regulation — padded, full height */}
       <div style={{ ...full('regulation'), paddingLeft: '1rem', paddingRight: '1rem', paddingTop: '1rem' }}>
         <Regulation />
       </div>
+
+      {/* Operations — padded, full height */}
       <div style={{ ...full('operations'), paddingLeft: '1rem', paddingRight: '1rem', paddingTop: '1rem' }}>
         <Operations />
       </div>
+
+      {/* Settings — centered, scrollable */}
       <div className="max-w-lg mx-auto" style={{ display: tab === 'settings' ? 'block' : 'none', padding: '1rem' }}>
         <Settings />
       </div>
@@ -45,10 +53,13 @@ function PageContent() {
   );
 }
 
+// AppShell does not read activeTab — it never re-renders on tab changes.
+// Only PageContent re-renders (a lightweight CSS display toggle).
 function AppShell() {
   const { state, setMode, setStatus } = useApp();
   useSeedData();
 
+  // Auto-return to OBSERVE after 10s of inactivity (unless in EMERGENCY)
   const handleInactivityReturn = useCallback(() => {
     setMode('OBSERVE');
     setStatus('idle');
@@ -56,6 +67,7 @@ function AppShell() {
 
   const inactivity = useInactivityReturn(state.daemonMode, handleInactivityReturn);
 
+  // Register activity on any pointer/keyboard interaction
   useEffect(() => {
     const register = () => inactivity.registerActivity();
     window.addEventListener('pointerdown', register);
@@ -86,12 +98,15 @@ function AppShell() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#0a0e1a' }}>
       <TopBar />
+
       <main
         className="flex-1 overflow-y-auto overflow-x-hidden pt-14 pb-20"
         style={{ WebkitOverflowScrolling: 'touch', background: '#0a0e1a' }}
       >
         <PageContent />
       </main>
+
+      {/* Inactivity auto-return indicator */}
       {inactivity.countdownActive && (
         <div
           className="fixed bottom-20 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg z-40"
@@ -109,6 +124,7 @@ function AppShell() {
           </p>
         </div>
       )}
+
       <BottomNav />
       <EmergencyDrawer />
       <PanicOverlay />
@@ -120,32 +136,6 @@ const WHITELIST = ['matylipsa@gmail.com'];
 
 export default function App() {
   const [user, setUser] = useState<SentraUser | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const [debugMode] = useState<boolean>(() => {
-    try {
-      return new URLSearchParams(window.location.search).get('debug') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    if (!debugMode) return;
-    const onError = (e: ErrorEvent) => {
-      setError(e.message || 'Error desconocido (window.onerror)');
-    };
-    const onRejection = (e: PromiseRejectionEvent) => {
-      const reason = e.reason instanceof Error ? e.reason.message : String(e.reason);
-      setError(`Promise rejection: ${reason}`);
-    };
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onRejection);
-    return () => {
-      window.removeEventListener('error', onError);
-      window.removeEventListener('unhandledrejection', onRejection);
-    };
-  }, [debugMode]);
 
   const handleAuth = (authenticatedUser: SentraUser) => {
     if (authenticatedUser.method === 'BIOMETRIC' || WHITELIST.includes(authenticatedUser.email ?? '')) {
@@ -157,21 +147,13 @@ export default function App() {
   };
 
   if (!user) {
-    return (
-      <>
-        <SentraAuth onAuthenticated={handleAuth} />
-        {debugMode && <DebugOverlay isAuthenticated={false} error={error} />}
-      </>
-    );
+    return <SentraAuth onAuthenticated={handleAuth} />;
   }
 
   return (
     <ToastProvider>
       <AppProvider>
-        <ErrorBoundary onError={setError}>
-          <AppShell />
-        </ErrorBoundary>
-        {debugMode && <DebugOverlay isAuthenticated={true} error={error} />}
+        <AppShell />
       </AppProvider>
     </ToastProvider>
   );

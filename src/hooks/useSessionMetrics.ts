@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonMode } from '../types';
 
 const LS_KEY = 'sentra_session_metrics_v1';
