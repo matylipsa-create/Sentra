@@ -4,7 +4,6 @@ import { addHistoryEvent, type SentraHistoryEvent } from './useSeedData';
 
 const DEMO_KEY = 'sentra_demo_mode';
 const DEMO_INTERVAL_MS = 8_000;
-const MAX_EVENTS = 20;
 
 type DemoEventType = 'vision' | 'audio' | 'keyword' | 'movement' | 'fall' | 'eme';
 

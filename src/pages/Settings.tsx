@@ -531,7 +531,7 @@ function DemoModeSection() {
   const { demoActive, toggleDemo } = useDemoEventGenerator();
 
   return (
-    <Section title="Modo Demo" icon={<FlaskConical size={16} className="text-blue-400" />}>
+    <Section title="Modo Demo" icon={FlaskConical}>
       <div className="p-4 rounded-xl border border-white/5 bg-white/5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">

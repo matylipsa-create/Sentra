@@ -18,8 +18,7 @@ export default function SessionReportBar({ data, onClear, onResetLifetime }: Pro
 
   const handlePNG = async () => {
     try {
-      const { data: reportData } = await shareReport(data);
-      void reportData;
+      await shareReport(data);
       toast({ title: 'Reporte PNG generado', variant: 'success' });
     } catch {
       toast({ title: 'Error generando PNG', variant: 'critical' });

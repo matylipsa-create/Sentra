@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Volume2, VolumeX, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useToast } from '../context/ToastContext';
-import { mesh } from '../lib/SentraMesh';
+import { mesh, type MeshEventType } from '../lib/SentraMesh';
 import { useSfx } from '../hooks/useSfx';
 import { useAutoReturn } from '../hooks/useAutoReturn';
 import { useSessionMetrics } from '../hooks/useSessionMetrics';
@@ -22,7 +21,6 @@ const MESH_EVENT_MAP: Record<string, { event: string; mode: DaemonMode; label: s
 
 export default function SentinelIntegration() {
   const { state, setMode, setStatus } = useApp();
-  const { toast } = useToast();
   const sfx = useSfx();
   const session = useSessionMetrics();
   const [expanded, setExpanded] = useState(false);
@@ -43,7 +41,7 @@ export default function SentinelIntegration() {
   // Subscribe to mesh events → SFX + metrics + mode change
   useEffect(() => {
     const unsubs = Object.entries(MESH_EVENT_MAP).map(([meshType, cfg]) =>
-      mesh.on(meshType, (e) => {
+      mesh.on(meshType as MeshEventType, (e) => {
         const payload = e.payload as { confidence?: number; alerta?: string; keyword?: string; label?: string };
         const confidence = payload.confidence ?? 0.5;
 

@@ -54,7 +54,7 @@ export function useInactivityReturn(
   }, []);
 
   useEffect(() => {
-    if (currentMode === 'EMERGENCY' || currentMode === 'OBSERVE') return;
+    if (currentMode === 'OBSERVE') return;
 
     const checkInactivity = () => {
       const elapsed = Date.now() - lastActivityRef.current;
